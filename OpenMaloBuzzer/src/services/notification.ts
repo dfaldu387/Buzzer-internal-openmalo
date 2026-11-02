@@ -1,12 +1,28 @@
+import {Platform} from 'react-native';
 import notifee, {
   AndroidImportance,
   AndroidVisibility,
   EventType,
+  IOSNotificationCategoryAction,
 } from '@notifee/react-native';
 import {VOICEMAIL_CHANNEL_ID, VOICEMAIL_CHANNEL_NAME} from '../constants';
 import {BuzzPayload} from '../types';
 
 export const createNotificationChannel = async () => {
+  // Register iOS notification categories at startup so action buttons
+  // (Ack, 5 min, Busy) are available on the very first notification.
+  // Without this, buttons only appear after the FCM background handler
+  // has run at least once.
+  if (Platform.OS === 'ios') {
+    await notifee.setNotificationCategories([{
+      id: 'buzz_actions',
+      actions: [
+        {id: 'ack', title: 'Ack', foreground: false} as IOSNotificationCategoryAction,
+        {id: 'five_min', title: '5 min', foreground: false} as IOSNotificationCategoryAction,
+        {id: 'busy', title: 'Busy', destructive: true, foreground: false} as IOSNotificationCategoryAction,
+      ],
+    }]);
+  }
   // The buzz channel (openmalo_buzz) is created ONLY by the native
   // BuzzerService.createBuzzChannel() in Kotlin, which sets USAGE_ALARM
   // audio attributes and bypassDnd=true. Notifee's createChannel API

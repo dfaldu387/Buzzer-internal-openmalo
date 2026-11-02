@@ -47,6 +47,7 @@ export const setupBackgroundHandler = () => {
               data.from_user_name || 'User',
               data.reason || '',
               data.note || null,
+              data.sound_id || 'buzz_alarm',
             );
             return !!started;
           } catch {
@@ -84,13 +85,8 @@ export const setupBackgroundHandler = () => {
           }]);
         }
 
-        // Read user's selected buzz sound
-        let buzzSoundName = 'buzz_alarm';
-        try {
-          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-          const stored = await AsyncStorage.getItem('@openmalo_buzz_sound');
-          if (stored) buzzSoundName = stored;
-        } catch {}
+        // Use sender-selected sound from FCM data
+        const buzzSoundName = data.sound_id || 'buzz_alarm';
 
         // Create a notifee-managed buzz channel for the fallback path.
         // This is separate from the native BuzzerService.createBuzzChannel()
@@ -133,10 +129,17 @@ export const setupBackgroundHandler = () => {
             autoCancel: false,
           },
           ios: {
-            // No sound here — the APNs system notification already played
-            // buzz_alarm.wav before this handler ran. Playing it again from
-            // notifee would cause a double sound.
-            interruptionLevel: 'timeSensitive',
+            // Play the custom buzz sound on this notification since we cancelled
+            // the APNs notification above to replace it with action buttons.
+            sound: `${buzzSoundName}.wav`,
+            // Critical Alerts bypass all Focus modes and DND, play at elevated
+            // volume, and wake the screen — matching Android's setBypassDnd(true)
+            // + USAGE_ALARM + FULL_WAKE_LOCK.
+            // REQUIRES: Critical Alerts entitlement from Apple.
+            // Without the entitlement, iOS silently downgrades to 'active' level.
+            critical: true,
+            criticalVolume: 1.0,
+            interruptionLevel: 'critical',
             categoryId: 'buzz_actions',
           },
           data: data as any,

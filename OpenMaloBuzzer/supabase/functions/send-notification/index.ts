@@ -52,7 +52,12 @@ async function getAccessToken(): Promise<string> {
     body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
   });
 
-  const tokenData = await res.json();
+  let tokenData: any;
+  try {
+    tokenData = await res.json();
+  } catch (parseErr) {
+    throw new Error(`OAuth2 response parse failed (HTTP ${res.status}): ${parseErr}`);
+  }
   if (!tokenData.access_token) {
     throw new Error(`OAuth2 error: ${JSON.stringify(tokenData)}`);
   }
@@ -98,13 +103,13 @@ Deno.serve(async (req) => {
               payload: {
                 aps: {
                   "content-available": 1,
-                  // Only play alarm sound for buzz type. For buzz_cancelled
-                  // and voice_message, use the default system sound.
-                  // For buzz, the JS background handler will take over sound
-                  // via notifee/react-native-sound — keep APNs sound as
-                  // fallback only for killed state where JS can't run.
+                  // Buzz type: use Critical Alert sound format so iOS bypasses
+                  // Focus/DND and plays at elevated volume. The dict format
+                  // {critical, name, volume} is safe even without the Critical
+                  // Alerts entitlement — iOS falls back to normal sound delivery.
+                  // Non-buzz types: use simple string/default sound.
                   sound: data?.type === "buzz"
-                    ? "buzz_alarm.wav"
+                    ? { critical: 1, name: `${data?.sound_id || "buzz_alarm"}.wav`, volume: 1.0 }
                     : data?.type === "voice_message"
                     ? "default"
                     : undefined,
@@ -116,6 +121,10 @@ Deno.serve(async (req) => {
                     ? { title: "Buzz cancelled", body: `${data?.from_user_name || "User"} cancelled the buzz` }
                     : undefined,
                   "mutable-content": 1,
+                  // Critical interruption level breaks through all Focus modes.
+                  // Requires Critical Alerts entitlement; without it, iOS
+                  // downgrades to "active" (still shows but doesn't bypass DND).
+                  ...(data?.type === "buzz" ? { "interruption-level": "critical" } : {}),
                 },
               },
             },
@@ -140,7 +149,7 @@ Deno.serve(async (req) => {
               : "messaging/invalid-registration-token",
           },
         }), {
-          status: 200,  // 200 so client-side stale detection runs
+          status: 410,  // Gone — token is no longer valid
           headers: { "Content-Type": "application/json" },
         });
       }

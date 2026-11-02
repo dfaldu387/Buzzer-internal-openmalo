@@ -8,12 +8,17 @@ export const sendBuzzPush = async (
   fromUserName: string,
   reason: string,
   note: string | null,
+  soundId: string = 'buzz_alarm',
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,fcm_token_stale').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
     if (!fcmToken) return;
+    // Skip sending to known-stale tokens — the buzz is already in the
+    // buzzes table so the receiver's polling fallback will pick it up
+    // when they next open the app.
+    if (tokenData.fcm_token_stale) return;
 
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -30,6 +35,7 @@ export const sendBuzzPush = async (
           from_user_name: fromUserName,
           reason,
           note: note || '',
+          sound_id: soundId,
         },
       }),
     });
@@ -63,9 +69,9 @@ export const sendBuzzCancelledPush = async (
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,fcm_token_stale').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken) return;
+    if (!fcmToken || tokenData.fcm_token_stale) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -94,9 +100,9 @@ export const sendVoiceMailPush = async (
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,fcm_token_stale').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken) return;
+    if (!fcmToken || tokenData.fcm_token_stale) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -125,12 +131,13 @@ export const sendEscalationPush = async (
   fromUserName: string,
   reason: string,
   note: string | null,
+  soundId: string = 'buzz_alarm',
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,fcm_token_stale').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken) return;
+    if (!fcmToken || tokenData.fcm_token_stale) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -147,6 +154,7 @@ export const sendEscalationPush = async (
           from_user_name: fromUserName,
           reason: `RE-BUZZ: ${reason}`,
           note: note || '',
+          sound_id: soundId,
         },
       }),
     });

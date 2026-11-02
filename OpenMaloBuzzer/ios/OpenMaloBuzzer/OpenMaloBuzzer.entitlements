@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Critical Alerts entitlement — TEMPORARILY REMOVED for device builds.
+
+	  Add this key back once Apple approves the entitlement:
+	  <key>com.apple.developer.usernotifications.critical-alerts</key>
+	  <true/>
+
+	  Apply at: https://developer.apple.com/contact/request/notifications-critical-alerts-entitlement/
+	  Without it, notifications use 'active' interruption level instead of 'critical'.
+	  The code (backgroundHandler.ts, send-notification/index.ts) already sends
+	  critical alert payloads — they'll activate automatically once the entitlement
+	  is approved and added back here.
+	-->
+</dict>
+</plist>

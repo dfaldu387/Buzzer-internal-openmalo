@@ -6,7 +6,9 @@ import {BuzzPayload, BuzzResponse, Buzz} from '../types';
 import {respondToBuzz, subscribeToBuzz} from '../services/firebase';
 import {cancelBuzzNotification} from '../services/notification';
 import {NO_RESPONSE_TIMEOUT_MS} from '../constants';
-import {getSelectedSound, BUZZ_SOUNDS} from '../services/soundPreference';
+import {BUZZ_SOUNDS} from '../services/soundPreference';
+
+const {BuzzerAlarmModule} = NativeModules;
 
 interface Props {
   payload: BuzzPayload;
@@ -29,6 +31,11 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
       vibrationRef.current = null;
     }
     Vibration.cancel();
+    // Deactivate audio session so ducked apps restore their volume.
+    // Equivalent to Android's abandonAudioFocusRequest().
+    if (Platform.OS === 'ios') {
+      try { BuzzerAlarmModule?.deactivateAlarmSession?.()?.catch(() => {}); } catch {}
+    }
   };
 
   const stopAllAlarms = () => {
@@ -36,11 +43,26 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
     stopIOSAlarm();
   };
 
-  // iOS: play alarm sound + vibration since there's no native BuzzerService
+  // iOS: play alarm sound + vibration since there's no native BuzzerService.
+  // Uses BuzzerAlarmModule to configure AVAudioSession with:
+  //   - .playback category: bypasses the hardware mute switch
+  //   - .duckOthers option: lowers other apps' audio (iOS audio focus equivalent)
+  // The audio background mode in Info.plist keeps playback alive if the user
+  // switches apps while the alarm is ringing.
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
-    Sound.setCategory('Playback');
-    getSelectedSound().then(soundId => {
+    const startAlarm = async () => {
+      // Always set Playback category as baseline — bypasses the mute switch.
+      // The native module call below adds .duckOthers on top of this.
+      // If the native module is unavailable, Playback alone still works.
+      Sound.setCategory('Playback');
+      // Activate alarm audio session (duck other audio on top of Playback)
+      try {
+        await BuzzerAlarmModule?.activateAlarmSession?.();
+      } catch {
+        // Native module unavailable or failed — Playback category is still set above
+      }
+      const soundId = payload.sound_id || 'buzz_alarm';
       const file = BUZZ_SOUNDS.find(s => s.id === soundId)?.file || 'buzz_alarm.wav';
       const s = new Sound(file, Sound.MAIN_BUNDLE, (err) => {
         if (err) return;
@@ -49,9 +71,10 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
         s.play();
       });
       soundRef.current = s;
-    });
-    // Vibrate in a loop
-    Vibration.vibrate([0, 500, 200, 500, 200, 500, 200, 500], true);
+      // Vibrate in a loop — pattern matches Android's BuzzerService vibration
+      Vibration.vibrate([0, 500, 200, 500, 200, 500, 200, 500], true);
+    };
+    startAlarm();
     return () => stopIOSAlarm();
   }, []);
 
@@ -86,6 +109,7 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
         payload.from_user_name || 'User',
         payload.reason || '',
         payload.note || null,
+        payload.sound_id || 'buzz_alarm',
       ).catch(() => {});
       // Cancel the native notification after a short delay — this full-screen
       // UI is already handling the buzz, so the notification in the shade is

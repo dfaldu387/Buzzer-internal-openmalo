@@ -1,9 +1,10 @@
 import React, {useState, useEffect, useCallback, useRef} from 'react';
-import {StatusBar, ActivityIndicator, View, StyleSheet, AppState, NativeModules, Platform, PermissionsAndroid, DeviceEventEmitter} from 'react-native';
+import {StatusBar, ActivityIndicator, View, StyleSheet, AppState, NativeModules, Platform, PermissionsAndroid, DeviceEventEmitter, Linking} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {useAuth} from './src/hooks/useAuth';
 import {createNotificationChannel, setupNotificationListeners, cancelBuzzNotification} from './src/services/notification';
 import {respondToBuzz, subscribeToIncomingBuzzes, subscribeToUsers, requestFcmPermission, getUserName} from './src/services/firebase';
+import {MISSED_BUZZ_WINDOW_MS} from './src/constants';
 import {promptBatteryOptimization, promptDndAccess} from './src/services/batteryOptimization';
 import {getSelectedSound} from './src/services/soundPreference';
 import {supabase} from './src/services/supabase';
@@ -19,13 +20,18 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import GroupBuzzSheet from './src/screens/GroupBuzzSheet';
-import VoiceCallScreen from './src/screens/VoiceCallScreen';
 import VoiceMailScreen from './src/screens/VoiceMailScreen';
-import BuzzSoundScreen from './src/screens/BuzzSoundScreen';
 
 const {BuzzerService} = NativeModules;
 
-type Screen = 'home' | 'buzz' | 'settings' | 'profile' | 'history' | 'groups' | 'group-buzz' | 'voice-call' | 'voice-mail' | 'buzz-sound';
+/** Safely convert created_at to epoch ms — handles both raw numbers and ISO strings. */
+const toEpochMs = (v: any): number => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') return new Date(v).getTime();
+  return 0;
+};
+
+type Screen = 'home' | 'buzz' | 'settings' | 'profile' | 'history' | 'groups' | 'group-buzz' | 'voice-mail';
 
 function App() {
   const {user, loading, login, signUp, deleteAccount, updateProfile, changePin, logout} = useAuth();
@@ -113,6 +119,7 @@ function App() {
               from_user_name: name,
               reason: buzz.reason,
               note: buzz.note,
+              sound_id: buzz.sound_id || null,
             };
           });
         }
@@ -156,7 +163,8 @@ function App() {
           .eq('to_user_id', user.id).eq('response', 'none');
         if (data && data.length > 0) {
           const buzz = data[0] as any;
-          if (Date.now() - buzz.created_at < 120000) {
+          const ts = toEpochMs(buzz.created_at);
+          if (ts > 0 && Date.now() - ts < MISSED_BUZZ_WINDOW_MS) {
             const name = buzz.from_user_name || usersMapRef.current[buzz.from_user_id] || 'User';
             setIncomingPayload(prev => {
               if (prev?.buzz_id === buzz.id) return prev;
@@ -166,6 +174,7 @@ function App() {
                 from_user_name: name,
                 reason: buzz.reason,
                 note: buzz.note,
+                sound_id: buzz.sound_id || null,
               };
             });
           }
@@ -197,6 +206,7 @@ function App() {
               from_user_name: data.from_user_name || 'User',
               reason: data.reason || '',
               note: data.note && data.note !== 'null' ? data.note : null,
+              sound_id: data.sound_id || null,
             };
           });
           // Start native alarm immediately — don't wait for IncomingBuzzScreen
@@ -209,6 +219,7 @@ function App() {
               data.from_user_name || 'User',
               data.reason || '',
               data.note || null,
+              data.sound_id || 'buzz_alarm',
             ).catch(() => {});
           }
         }
@@ -276,6 +287,7 @@ function App() {
               from_user_name: immediateName,
               reason: data.reason,
               note: data.note || null,
+              sound_id: data.sound_id || null,
             };
           });
           setPendingChecked(true);
@@ -313,7 +325,37 @@ function App() {
                   from_user_id: (nData.from_user_id as string) || '',
                   from_user_name: (nData.from_user_name as string) || 'User',
                   reason: (nData.reason as string) || '',
-                  note: nData.note as string || null,
+                  note: nData.note && nData.note !== 'null' ? (nData.note as string) : null,
+                  sound_id: (nData.sound_id as string) || null,
+                };
+              });
+              setPendingChecked(true);
+              return;
+            }
+          }
+        } catch {}
+
+        // Safety net: check Supabase for any missed unanswered buzzes.
+        // This catches buzzes sent while the app was inactive and the
+        // FCM token was stale (e.g., iOS app not opened for 2+ days).
+        try {
+          const {data: missed} = await supabase.from('buzzes').select('*')
+            .eq('to_user_id', userRef.current?.id || '').eq('response', 'none')
+            .order('created_at', {ascending: false}).limit(1);
+          if (missed && missed.length > 0) {
+            const buzz = missed[0] as any;
+            const ts = toEpochMs(buzz.created_at);
+            if (ts > 0 && Date.now() - ts < MISSED_BUZZ_WINDOW_MS) {
+              const name = buzz.from_user_name || usersMapRef.current[buzz.from_user_id] || 'User';
+              setIncomingPayload(prev => {
+                if (prev?.buzz_id === buzz.id) return prev;
+                return {
+                  buzz_id: buzz.id,
+                  from_user_id: buzz.from_user_id,
+                  from_user_name: name,
+                  reason: buzz.reason,
+                  note: buzz.note,
+                  sound_id: buzz.sound_id || null,
                 };
               });
               setPendingChecked(true);
@@ -355,12 +397,15 @@ function App() {
     await deleteAccount();
   }, [deleteAccount]);
 
-  const handleSelectUser = useCallback((u: User) => { setAutoSend(false); setInitialReason(undefined); setSelectedUser(u); setScreen('buzz'); }, []);
-  const handleBuzzAgain = useCallback((u: User, reason: string) => { setAutoSend(true); setInitialReason(reason); setSelectedUser(u); setScreen('buzz'); }, []);
-  const handleEditBuzz = useCallback((u: User, reason: string) => { setAutoSend(false); setInitialReason(reason); setSelectedUser(u); setScreen('buzz'); }, []);
-  const handleCloseBuzz = useCallback(() => { setSelectedUser(null); setInitialReason(undefined); setAutoSend(false); setScreen('home'); }, []);
+  const [initialSound, setInitialSound] = useState<string | undefined>(undefined);
+  const handleSelectUser = useCallback((u: User) => { setAutoSend(false); setInitialReason(undefined); setInitialSound(undefined); setSelectedUser(u); setScreen('buzz'); }, []);
+  const handleBuzzAgain = useCallback((u: User, reason: string, soundId?: string) => { setAutoSend(true); setInitialReason(reason); setInitialSound(soundId); setSelectedUser(u); setScreen('buzz'); }, []);
+  const handleEditBuzz = useCallback((u: User, reason: string) => { setAutoSend(false); setInitialReason(reason); setInitialSound(undefined); setSelectedUser(u); setScreen('buzz'); }, []);
+  const handleCloseBuzz = useCallback(() => { setSelectedUser(null); setInitialReason(undefined); setInitialSound(undefined); setAutoSend(false); setScreen('home'); }, []);
   const handleDismissIncoming = useCallback(() => { setIncomingPayload(null); }, []);
-  const handleCallUser = useCallback((u: User) => { setSelectedUser(u); setScreen('voice-call'); }, []);
+  const handleCallUser = useCallback((u: User) => {
+    Linking.openURL(`tel:${u.phone}`).catch(() => {});
+  }, []);
   const handleVoiceMail = useCallback((u?: User) => { setSelectedUser(u || null); setScreen('voice-mail'); }, []);
   const handleBuzzGroup = useCallback((g: Group) => { setSelectedGroup(g); setScreen('group-buzz'); }, []);
   const handleEditGroup = useCallback((g: Group) => { setEditGroup(g); setScreen('groups'); }, []);
@@ -398,14 +443,12 @@ function App() {
               initialTab={homeTab}
             />
           )}
-          {screen === 'buzz' && selectedUser && <BuzzSheet key={selectedUser.id + (initialReason || '') + (autoSend ? '_auto' : '')} sender={user} receiver={selectedUser} onClose={handleCloseBuzz} initialReason={initialReason} autoSend={autoSend} />}
+          {screen === 'buzz' && selectedUser && <BuzzSheet key={selectedUser.id + (initialReason || '') + (autoSend ? '_auto' : '')} sender={user} receiver={selectedUser} onClose={handleCloseBuzz} initialReason={initialReason} autoSend={autoSend} initialSound={initialSound} />}
           {screen === 'groups' && <GroupsScreen currentUser={user} onBack={() => { setEditGroup(null); setHomeTab('groups'); setScreen('home'); }} onBuzzGroup={handleBuzzGroup} initialEditGroup={editGroup || undefined} />}
           {screen === 'group-buzz' && selectedGroup && <GroupBuzzSheet sender={user} group={selectedGroup} onClose={handleCloseGroup} />}
-          {screen === 'voice-call' && selectedUser && <VoiceCallScreen caller={user} receiver={selectedUser} onClose={() => { setSelectedUser(null); setScreen('home'); }} />}
           {screen === 'voice-mail' && <VoiceMailScreen currentUser={user} targetUser={selectedUser || undefined} onBack={() => { setSelectedUser(null); setScreen('home'); }} />}
           {screen === 'settings' && <SettingsScreen currentUser={user} onBack={() => setScreen('home')} />}
-          {screen === 'profile' && <ProfileScreen currentUser={user} onBack={() => setScreen('home')} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onUpdateProfile={updateProfile} onChangePin={changePin} onBuzzSound={() => setScreen('buzz-sound')} />}
-          {screen === 'buzz-sound' && <BuzzSoundScreen onBack={() => setScreen('profile')} />}
+          {screen === 'profile' && <ProfileScreen currentUser={user} onBack={() => setScreen('home')} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} onUpdateProfile={updateProfile} onChangePin={changePin} />}
           {screen === 'history' && <HistoryScreen currentUser={user} onBack={() => setScreen('home')} />}
 
           {/* Incoming buzz overlay — renders on TOP of any screen without unmounting it */}

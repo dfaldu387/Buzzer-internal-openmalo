@@ -3,6 +3,10 @@ export const MAX_NOTE_LENGTH = 40;
 export const REBUZZ_TIMEOUT_MS = 60000;
 export const NO_RESPONSE_TIMEOUT_MS = 120000;
 export const PRESENCE_TIMEOUT_MS = 30000; // 30 seconds
+// Maximum age of a buzz that will still trigger the alarm screen when
+// the user opens the app. Set high so buzzes sent while the app was
+// inactive (e.g., stale FCM token on iOS) are not silently missed.
+export const MISSED_BUZZ_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 export const NOTIFICATION_CHANNEL_ID = 'openmalo_buzz';
 export const NOTIFICATION_CHANNEL_NAME = 'OpenMalo Buzz';
