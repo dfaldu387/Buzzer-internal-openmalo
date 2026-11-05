@@ -12,7 +12,6 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {User} from '../types';
-import {BUZZ_SOUNDS, getSelectedSound} from '../services/soundPreference';
 
 interface Props {
   currentUser: User;
@@ -21,7 +20,6 @@ interface Props {
   onDeleteAccount: () => Promise<void>;
   onUpdateProfile: (data: {name?: string; phone?: string}) => Promise<void>;
   onChangePin: (currentPin: string, newPin: string) => Promise<void>;
-  onBuzzSound: () => void;
 }
 
 const ProfileScreen: React.FC<Props> = ({
@@ -31,7 +29,6 @@ const ProfileScreen: React.FC<Props> = ({
   onDeleteAccount,
   onUpdateProfile,
   onChangePin,
-  onBuzzSound,
 }) => {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState(currentUser.name);
@@ -43,16 +40,9 @@ const ProfileScreen: React.FC<Props> = ({
   const [confirmPin, setConfirmPin] = useState('');
   const [changingPin, setChangingPin] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [selectedSoundLabel, setSelectedSoundLabel] = useState('Classic');
-
-  useEffect(() => {
-    getSelectedSound().then(id => {
-      const label = BUZZ_SOUNDS.find(s => s.id === id)?.label || 'Classic';
-      setSelectedSoundLabel(label);
-    });
-  }, []);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [alertModal, setAlertModal] = useState<{
     visible: boolean;
     type: 'success' | 'error';
@@ -152,14 +142,17 @@ const ProfileScreen: React.FC<Props> = ({
           />
           <Text style={styles.label}>Phone</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, phone.length > 0 && phone.length < 10 && {borderColor: '#F44336'}]}
             value={phone}
             onChangeText={t => setPhone(t.replace(/[^0-9]/g, ''))}
-            placeholder="Phone number"
+            placeholder="Phone number (min 10 digits)"
             placeholderTextColor="#666"
             keyboardType="phone-pad"
             maxLength={15}
           />
+          {phone.length > 0 && phone.length < 10 && (
+            <Text style={{color: '#F44336', fontSize: 12, marginTop: 2, marginBottom: 4}}>Phone number must be at least 10 digits</Text>
+          )}
           <TouchableOpacity
             style={[
               styles.saveBtn,
@@ -232,22 +225,6 @@ const ProfileScreen: React.FC<Props> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Buzz Sound */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>PREFERENCES</Text>
-          <TouchableOpacity style={styles.navRow} onPress={onBuzzSound} activeOpacity={0.7}>
-            <View style={styles.navRowLeft}>
-              <View style={styles.navRowIcon}>
-                <Icon name="notifications-active" size={20} color="#FF4D4D" />
-              </View>
-              <View>
-                <Text style={styles.navRowTitle}>Buzz Sound</Text>
-                <Text style={styles.navRowSub}>{selectedSoundLabel}</Text>
-              </View>
-            </View>
-            <Icon name="chevron-right" size={24} color="#555" />
-          </TouchableOpacity>
-        </View>
 
         {/* Account Actions */}
         <View style={styles.section}>
@@ -361,12 +338,18 @@ const ProfileScreen: React.FC<Props> = ({
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.modalDeleteBtn}
-                onPress={() => {
-                  setShowDeleteModal(false);
-                  onDeleteAccount();
+                style={[styles.modalDeleteBtn, deleting && {opacity: 0.5}]}
+                disabled={deleting}
+                onPress={async () => {
+                  setDeleting(true);
+                  try {
+                    await onDeleteAccount();
+                  } catch {
+                    setDeleting(false);
+                    setShowDeleteModal(false);
+                  }
                 }}>
-                <Text style={styles.modalConfirmText}>Delete</Text>
+                <Text style={styles.modalConfirmText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -403,7 +386,7 @@ const styles = StyleSheet.create({
   avatarText: {color: '#FF4D4D', fontSize: 34, fontWeight: '800'},
   roleBadge: {
     color: '#FF4D4D',
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
     backgroundColor: '#2a1515',
@@ -416,12 +399,12 @@ const styles = StyleSheet.create({
   section: {paddingHorizontal: 16, marginBottom: 24},
   sectionTitle: {
     color: '#888',
-    fontSize: 18,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: 12,
   },
-  label: {color: '#999', fontSize: 18, fontWeight: '600', marginBottom: 6},
+  label: {color: '#999', fontSize: 14, fontWeight: '600', marginBottom: 6},
   input: {
     backgroundColor: '#1A1A1A',
     color: '#fff',

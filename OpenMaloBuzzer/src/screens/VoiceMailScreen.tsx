@@ -108,9 +108,16 @@ const VoiceMailScreen: React.FC<Props> = ({currentUser, targetUser, onBack}) => 
     try {
       const recorder = getRecorder();
       const path = await recorder?.stopRecording();
-      setRecordedPath(path || null);
+      if (path) {
+        setRecordedPath(path);
+      } else {
+        Alert.alert('Recording Failed', 'The recording could not be saved. Please try again.');
+        setRecordedPath(null);
+      }
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Could not stop recording');
+      console.warn('stopRecording error:', err);
+      Alert.alert('Recording Failed', err?.message || 'Could not stop recording. Please try again.');
+      setRecordedPath(null);
     }
     setRecording(false);
   };
@@ -163,7 +170,10 @@ const VoiceMailScreen: React.FC<Props> = ({currentUser, targetUser, onBack}) => 
           return;
         }
         s.setVolume(1.0);
-        s.play(() => {
+        s.play((success) => {
+          if (!success) {
+            setPlaying(null);
+          }
           s.release();
           soundRef.current = null;
           setPlaying(null);
@@ -458,9 +468,9 @@ const styles = StyleSheet.create({
   selectBtn: {color: '#FF4D4D', fontSize: 18, fontWeight: '600'},
   selectBar: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10},
   selectAllBtn: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  selectAllText: {color: '#ccc', fontSize: 18, fontWeight: '600'},
+  selectAllText: {color: '#ccc', fontSize: 14, fontWeight: '600'},
   deleteSelectedBtn: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3a1010', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8},
-  deleteSelectedText: {color: '#F44336', fontSize: 18, fontWeight: '700'},
+  deleteSelectedText: {color: '#F44336', fontSize: 14, fontWeight: '700'},
   checkbox: {width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#555', alignItems: 'center', justifyContent: 'center', marginRight: 10},
   checkboxSelected: {backgroundColor: '#FF4D4D', borderColor: '#FF4D4D'},
   mailRowSelected: {backgroundColor: '#2a1515'},
@@ -471,8 +481,8 @@ const styles = StyleSheet.create({
   mailAvatar: {width: 40, height: 40, borderRadius: 20, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center', marginRight: 10},
   mailAvatarText: {color: '#fff', fontSize: 18, fontWeight: '700'},
   mailContent: {flex: 1},
-  mailFrom: {color: '#fff', fontSize: 18, fontWeight: '600'},
-  mailMeta: {color: '#666', fontSize: 18, marginTop: 2},
+  mailFrom: {color: '#fff', fontSize: 16, fontWeight: '600'},
+  mailMeta: {color: '#666', fontSize: 12, marginTop: 2},
   playBtn: {width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center', marginLeft: 8},
   playBtnActive: {backgroundColor: '#FF4D4D'},
   deleteMailBtn: {width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginLeft: 4},

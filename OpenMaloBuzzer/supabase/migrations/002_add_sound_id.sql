@@ -1,0 +1,1 @@
+ALTER TABLE buzzes ADD COLUMN IF NOT EXISTS sound_id TEXT;

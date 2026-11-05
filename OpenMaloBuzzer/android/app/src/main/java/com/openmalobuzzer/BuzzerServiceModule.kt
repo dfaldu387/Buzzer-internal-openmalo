@@ -58,7 +58,7 @@ class BuzzerServiceModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun showBuzz(buzzId: String, fromUserId: String, fromUserName: String, reason: String, note: String?, promise: Promise) {
+    fun showBuzz(buzzId: String, fromUserId: String, fromUserName: String, reason: String, note: String?, soundId: String?, promise: Promise) {
         try {
             val intent = Intent(reactApplicationContext, BuzzerService::class.java).apply {
                 action = BuzzerService.ACTION_SHOW_BUZZ
@@ -67,6 +67,7 @@ class BuzzerServiceModule(reactContext: ReactApplicationContext) :
                 putExtra(BuzzerService.EXTRA_FROM_USER_NAME, fromUserName)
                 putExtra(BuzzerService.EXTRA_REASON, reason)
                 putExtra(BuzzerService.EXTRA_NOTE, note ?: "")
+                putExtra(BuzzerService.EXTRA_SOUND_ID, soundId ?: "buzz_alarm")
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 reactApplicationContext.startForegroundService(intent)
@@ -98,6 +99,7 @@ class BuzzerServiceModule(reactContext: ReactApplicationContext) :
                 putString("from_user_name", payload.getString("from_user_name") ?: "")
                 putString("reason", payload.getString("reason") ?: "")
                 putString("note", payload.getString("note") ?: "")
+                putString("sound_id", payload.getString("sound_id") ?: "buzz_alarm")
             }
             MainActivity.pendingBuzzPayload = null
             promise.resolve(map)
@@ -350,6 +352,13 @@ class BuzzerServiceModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun setMuted(muted: Boolean) {
+        reactApplicationContext.getSharedPreferences(
+            BuzzerService.PREFS_NAME, android.content.Context.MODE_PRIVATE
+        ).edit().putBoolean("app_muted", muted).apply()
+    }
+
+    @ReactMethod
     fun cancelBuzzNotification(buzzId: String) {
         val nm = reactApplicationContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         nm.cancel(buzzId.hashCode())
@@ -357,6 +366,14 @@ class BuzzerServiceModule(reactContext: ReactApplicationContext) :
         for (n in nm.activeNotifications) {
             if (n.tag == buzzId) nm.cancel(n.tag, n.id)
         }
+    }
+
+    // ─── DND Access ────────────────────────────────────────
+
+    @ReactMethod
+    fun isDndAccessGranted(promise: Promise) {
+        val nm = reactApplicationContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        promise.resolve(nm.isNotificationPolicyAccessGranted)
     }
 
     // ─── OEM Battery Optimization ───────────────────────────

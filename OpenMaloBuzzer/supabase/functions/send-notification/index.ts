@@ -99,7 +99,13 @@ Deno.serve(async (req) => {
             data: data || {},
             android: { priority: "high" },
             apns: {
-              headers: { "apns-priority": "10", "apns-push-type": "alert" },
+              headers: {
+                "apns-priority": "10",
+                "apns-push-type": "alert",
+                // collapse-id groups buzz + buzz_cancelled by buzz_id so the
+                // cancellation notification replaces the original on iOS.
+                ...(data?.buzz_id ? { "apns-collapse-id": data.buzz_id } : {}),
+              },
               payload: {
                 aps: {
                   "content-available": 1,
@@ -124,7 +130,7 @@ Deno.serve(async (req) => {
                   // Critical interruption level breaks through all Focus modes.
                   // Requires Critical Alerts entitlement; without it, iOS
                   // downgrades to "active" (still shows but doesn't bypass DND).
-                  ...(data?.type === "buzz" ? { "interruption-level": "critical" } : {}),
+                  ...(data?.type === "buzz" ? { "interruption-level": "critical", "category": "buzz_actions" } : {}),
                 },
               },
             },

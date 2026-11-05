@@ -2,7 +2,6 @@ import {Alert, NativeModules, Platform} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BATTERY_PROMPT_KEY = '@openmalo_battery_prompted';
-const DND_PROMPT_KEY = '@openmalo_dnd_prompted';
 
 const {BuzzerService} = NativeModules;
 
@@ -103,6 +102,14 @@ export const checkAndPromptBattery = async (): Promise<BatteryInfo | null> => {
     issues.push(`${info.oemName} devices require Autostart permission for reliable background buzzes.`);
   }
 
+  // Check DND access — required for alarm to override silent/DND mode
+  try {
+    const dndGranted = await BuzzerService?.isDndAccessGranted?.();
+    if (!dndGranted) {
+      issues.push('Do Not Disturb access is not granted — buzzes will be silent when your phone is on silent or DND mode.');
+    }
+  } catch {}
+
   if (issues.length > 0) {
     Alert.alert(
       'Background Buzz Check',
@@ -152,18 +159,25 @@ const showGenericPrompt = () => {
   );
 };
 
+let dndPromptedThisSession = false;
+
 export const promptDndAccess = async () => {
   if (Platform.OS !== 'android') return;
+  if (dndPromptedThisSession) return;
 
-  const prompted = await AsyncStorage.getItem(DND_PROMPT_KEY);
-  if (prompted) return;
+  // Check if DND access is already granted — if so, no need to prompt
+  try {
+    const granted = await BuzzerService?.isDndAccessGranted?.();
+    if (granted) return;
+  } catch {}
 
-  await AsyncStorage.setItem(DND_PROMPT_KEY, 'true');
+  // Rate-limit: only prompt once per session
+  dndPromptedThisSession = true;
 
   const {Linking} = require('react-native');
   Alert.alert(
     'Allow Do Not Disturb Access',
-    'Buzzer needs DND access to ring loud even when your phone is on silent or Do Not Disturb mode.',
+    'Buzzer needs DND access to ring loud even when your phone is on silent or Do Not Disturb mode. Without it, you may miss buzzes.',
     [
       {
         text: 'Allow',

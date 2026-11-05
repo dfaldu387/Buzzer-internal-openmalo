@@ -6,6 +6,7 @@ import {User, Group, Buzz, BuzzResponse} from '../types';
 import {useReasons} from '../hooks/useReasons';
 import {createGroupBuzz, subscribeToBuzz, subscribeToUsers, respondToBuzz} from '../services/firebase';
 import {sendBuzzPush, sendBuzzCancelledPush} from '../services/pushNotification';
+import {BUZZ_SOUNDS} from '../services/soundPreference';
 import {MAX_NOTE_LENGTH} from '../constants';
 
 interface Props {
@@ -30,12 +31,14 @@ const GroupBuzzSheet: React.FC<Props> = ({sender, group, onClose}) => {
   const [isOther, setIsOther] = useState(false);
   const [customReason, setCustomReason] = useState('');
   const [note, setNote] = useState('');
+  const [selectedSound, setSelectedSound] = useState<string>('buzz_alarm');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [responses, setResponses] = useState<Record<string, BuzzResponse>>({});
   const [usersMap, setUsersMap] = useState<Record<string, string>>({});
   const unsubsRef = useRef<(() => void)[]>([]);
   const buzzIdsRef = useRef<string[]>([]);
+  const buzzToMemberRef = useRef<Record<string, string>>({});
 
   const memberIds = group.member_ids.filter(id => id !== sender.id);
 
@@ -58,13 +61,16 @@ const GroupBuzzSheet: React.FC<Props> = ({sender, group, onClose}) => {
     setSending(true);
     let docs;
     try {
-      docs = await createGroupBuzz(sender.id, sender.name, memberIds, reason, note.trim() || null, group.id, group.name);
+      docs = await createGroupBuzz(sender.id, sender.name, memberIds, reason, note.trim() || null, group.id, group.name, selectedSound);
     } catch (err: any) {
       setSending(false);
       Alert.alert('Buzz Failed', 'Could not send group buzz. Check your internet connection and try again.');
       return;
     }
     buzzIdsRef.current = docs.map(d => d.id);
+    const mapping: Record<string, string> = {};
+    docs.forEach((doc, index) => { mapping[doc.id] = memberIds[index]; });
+    buzzToMemberRef.current = mapping;
     Vibration.vibrate(200);
     setSending(false);
     setSent(true);
@@ -72,7 +78,7 @@ const GroupBuzzSheet: React.FC<Props> = ({sender, group, onClose}) => {
     // Send FCM push to each member via Supabase Edge Function
     docs.forEach((doc, index) => {
       const memberId = memberIds[index];
-      sendBuzzPush(memberId, doc.id, sender.id, sender.name, reason, note.trim() || null).catch(() => {});
+      sendBuzzPush(memberId, doc.id, sender.id, sender.name, reason, note.trim() || null, selectedSound).catch(() => {});
     });
 
     // Initialize all responses as 'none'
@@ -96,7 +102,7 @@ const GroupBuzzSheet: React.FC<Props> = ({sender, group, onClose}) => {
     unsubsRef.current.forEach(u => u());
     unsubsRef.current = [];
     for (const buzzId of buzzIdsRef.current) {
-      const memberId = memberIds[buzzIdsRef.current.indexOf(buzzId)];
+      const memberId = buzzToMemberRef.current[buzzId];
       if (memberId && responses[memberId] === 'none') {
         await respondToBuzz(buzzId, 'cancelled');
         sendBuzzCancelledPush(memberId, buzzId, sender.name).catch(() => {});
@@ -179,6 +185,15 @@ const GroupBuzzSheet: React.FC<Props> = ({sender, group, onClose}) => {
         <TextInput style={styles.noteInput} placeholder="Enter custom reason" placeholderTextColor="#666" value={customReason} onChangeText={setCustomReason} maxLength={50} autoFocus />
       )}
       <TextInput style={styles.noteInput} placeholder="Optional note (40 chars)" placeholderTextColor="#666" value={note} onChangeText={setNote} maxLength={MAX_NOTE_LENGTH} />
+      <Text style={styles.label}>Sound</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.soundScroll} contentContainerStyle={styles.soundScrollContent}>
+        {BUZZ_SOUNDS.map(s => (
+          <TouchableOpacity key={s.id} style={[styles.soundChip, selectedSound === s.id && styles.soundChipSelected]} onPress={() => setSelectedSound(s.id)}>
+            <Icon name={s.icon} size={18} color={selectedSound === s.id ? s.color : '#888'} />
+            <Text style={[styles.soundChipText, selectedSound === s.id && {color: s.color}]}>{s.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
       <TouchableOpacity
         style={[styles.buzzButton, (sending || !(isOther ? customReason.trim() : selectedReason)) && styles.buzzButtonDisabled]}
         onPress={handleSend}
@@ -194,26 +209,31 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#0D0D0D', paddingHorizontal: 20},
   header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 16},
   headerTitle: {color: '#fff', fontSize: 20, fontWeight: '700'},
-  memberCount: {color: '#FF9800', fontSize: 18, fontWeight: '600', marginBottom: 16, textAlign: 'center'},
-  label: {color: '#888', fontSize: 18, fontWeight: '600', marginBottom: 12, marginTop: 8},
+  memberCount: {color: '#FF9800', fontSize: 14, fontWeight: '600', marginBottom: 16, textAlign: 'center'},
+  label: {color: '#888', fontSize: 14, fontWeight: '600', marginBottom: 12, marginTop: 8},
   chipsContainer: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
   chip: {backgroundColor: '#1A1A1A', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#333'},
   chipSelected: {backgroundColor: '#3a1515', borderColor: '#FF4D4D'},
   chipText: {color: '#ccc', fontSize: 15},
   chipTextSelected: {color: '#FF4D4D', fontWeight: '600'},
   noteInput: {backgroundColor: '#1A1A1A', color: '#fff', fontSize: 18, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 10, marginTop: 16, borderWidth: 1, borderColor: '#333'},
+  soundScroll: {maxHeight: 48, marginBottom: 4},
+  soundScrollContent: {gap: 8},
+  soundChip: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1A1A1A', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#333'},
+  soundChipSelected: {backgroundColor: '#1a1a2a', borderColor: '#64B5F6'},
+  soundChipText: {color: '#888', fontSize: 14, fontWeight: '600'},
   buzzButton: {backgroundColor: '#4CAF50', paddingVertical: 20, borderRadius: 14, alignItems: 'center', marginTop: 24},
   buzzButtonDisabled: {opacity: 0.4},
   buzzButtonText: {color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 2},
-  statusSummary: {color: '#888', fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 16},
+  statusSummary: {color: '#888', fontSize: 14, fontWeight: '600', textAlign: 'center', marginBottom: 16},
   responseList: {flex: 1},
   memberRow: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 12, padding: 14, marginBottom: 8},
   memberAvatar: {width: 44, height: 44, borderRadius: 22, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center', marginRight: 12, borderWidth: 2},
   memberAvatarText: {color: '#fff', fontSize: 18, fontWeight: '700'},
   memberInfo: {flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  memberName: {color: '#fff', fontSize: 18, fontWeight: '600'},
+  memberName: {color: '#fff', fontSize: 16, fontWeight: '600'},
   responseBadge: {flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, gap: 4},
-  responseLabel: {fontSize: 18, fontWeight: '700'},
+  responseLabel: {fontSize: 13, fontWeight: '700'},
   doneButton: {backgroundColor: '#1A1A1A', paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginTop: 8},
   doneButtonText: {color: '#ccc', fontSize: 18, fontWeight: '600'},
   endButton: {backgroundColor: '#F44336', paddingVertical: 18, borderRadius: 14, alignItems: 'center', marginTop: 8},

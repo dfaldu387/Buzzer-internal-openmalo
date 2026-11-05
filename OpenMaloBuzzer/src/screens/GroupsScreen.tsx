@@ -37,7 +37,8 @@ const GroupsScreen: React.FC<Props> = ({currentUser, onBack, onBuzzGroup, initia
       setSelectedIds(new Set(initialEditGroup.member_ids));
       setShowCreate(true);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEditGroup]);
 
   const toggleMember = (id: string) => {
     setSelectedIds(prev => {
@@ -230,11 +231,11 @@ const styles = StyleSheet.create({
   header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12},
   backBtn: {color: '#FF4D4D', fontSize: 20, fontWeight: '700'},
   headerTitle: {color: '#fff', fontSize: 22, fontWeight: '700'},
-  addBtn: {color: '#FF4D4D', fontSize: 18, fontWeight: '600'},
+  addBtn: {color: '#FF4D4D', fontSize: 14, fontWeight: '600'},
   scroll: {flex: 1},
   createForm: {margin: 16, backgroundColor: '#1A1A1A', borderRadius: 16, padding: 16},
   input: {backgroundColor: '#252525', color: '#fff', fontSize: 18, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, marginBottom: 12},
-  label: {color: '#888', fontSize: 18, fontWeight: '600', marginBottom: 8},
+  label: {color: '#888', fontSize: 14, fontWeight: '600', marginBottom: 8},
   memberList: {gap: 6, marginBottom: 16},
   memberChip: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#252525', borderRadius: 10, padding: 10, borderWidth: 1.5, borderColor: '#333'},
   memberChipActive: {backgroundColor: '#2a1515', borderColor: '#FF4D4D'},
@@ -252,18 +253,18 @@ const styles = StyleSheet.create({
   emptyState: {alignItems: 'center', paddingTop: 80},
   emptyIcon: {fontSize: 52, marginBottom: 12},
   emptyText: {color: '#888', fontSize: 19, fontWeight: '600'},
-  emptySubtext: {color: '#999', fontSize: 18, marginTop: 4},
+  emptySubtext: {color: '#999', fontSize: 14, marginTop: 4},
   groupCard: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', marginHorizontal: 16, marginBottom: 8, borderRadius: 14, padding: 14},
   groupCardCompact: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1A1A1A', marginHorizontal: 16, marginBottom: 6, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12},
   groupCardMain: {flex: 1, flexDirection: 'row', alignItems: 'center'},
   groupAvatar: {width: 48, height: 48, borderRadius: 24, backgroundColor: '#2a1515', alignItems: 'center', justifyContent: 'center', marginRight: 12},
   groupAvatarText: {fontSize: 24},
   groupInfo: {flex: 1},
-  groupName: {color: '#fff', fontSize: 18, fontWeight: '700'},
-  groupMembers: {color: '#999', fontSize: 18, marginTop: 2},
-  groupCount: {color: '#999', fontSize: 18, marginTop: 2},
+  groupName: {color: '#fff', fontSize: 16, fontWeight: '700'},
+  groupMembers: {color: '#999', fontSize: 13, marginTop: 2},
+  groupCount: {color: '#999', fontSize: 13, marginTop: 2},
   groupActions: {flexDirection: 'row', gap: 12, alignItems: 'center'},
-  editBtn: {color: '#FF9800', fontSize: 18, fontWeight: '600'},
+  editBtn: {color: '#FF9800', fontSize: 14, fontWeight: '600'},
   deleteBtn: {color: '#F44336', fontSize: 20, fontWeight: '700'},
   modalOverlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32},
   modalBox: {backgroundColor: '#1A1A1A', borderRadius: 20, padding: 28, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#333'},

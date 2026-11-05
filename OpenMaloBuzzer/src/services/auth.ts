@@ -74,11 +74,6 @@ export const signup = async (
 };
 
 export const deleteAccount = async (userId: string): Promise<void> => {
-  // Clear FCM token before deleting account
-  try {
-    const {supabase} = require('./supabase');
-    await supabase.from('user_tokens').delete().eq('user_id', userId);
-  } catch {}
   await removeUser(userId);
   await AsyncStorage.removeItem(AUTH_KEY);
 };
@@ -87,7 +82,9 @@ export const getStoredUser = async (): Promise<User | null> => {
   const data = await AsyncStorage.getItem(AUTH_KEY);
   if (!data) return null;
   const parsed = JSON.parse(data);
-  return {...parsed, pin_hash: parsed.pin_hash || ''};
+  // pin_hash is intentionally stripped during storage for security.
+  // Set a sentinel value so code doesn't accidentally use it for verification.
+  return {...parsed, pin_hash: '__stored_locally__'};
 };
 
 export const logout = async () => {

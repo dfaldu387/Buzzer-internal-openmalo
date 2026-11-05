@@ -1,6 +1,7 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, NativeModules, Platform, Vibration} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Sound from 'react-native-sound';
 import {BuzzPayload, BuzzResponse, Buzz} from '../types';
 import {respondToBuzz, subscribeToBuzz} from '../services/firebase';
@@ -52,26 +53,44 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
     const startAlarm = async () => {
-      // Always set Playback category as baseline — bypasses the mute switch.
-      // The native module call below adds .duckOthers on top of this.
-      // If the native module is unavailable, Playback alone still works.
-      Sound.setCategory('Playback');
-      // Activate alarm audio session (duck other audio on top of Playback)
-      try {
-        await BuzzerAlarmModule?.activateAlarmSession?.();
-      } catch {
-        // Native module unavailable or failed — Playback category is still set above
+      // Check in-app mute toggle
+      const isMuted = (await AsyncStorage.getItem('@openmalo_muted')) === 'true';
+
+      if (!isMuted) {
+        // Always set Playback category as baseline — bypasses the mute switch.
+        // The native module call below adds .duckOthers on top of this.
+        // If the native module is unavailable, Playback alone still works.
+        Sound.setCategory('Playback');
+        // Activate alarm audio session (duck other audio on top of Playback)
+        try {
+          await BuzzerAlarmModule?.activateAlarmSession?.();
+        } catch {
+          // Native module unavailable or failed — Playback category is still set above
+        }
+        const soundId = payload.sound_id || 'buzz_alarm';
+        const file = BUZZ_SOUNDS.find(s => s.id === soundId)?.file || 'buzz_alarm.wav';
+        const s = new Sound(file, Sound.MAIN_BUNDLE, (err) => {
+          if (err) {
+            console.warn('iOS alarm sound load failed:', file, err);
+            // Fallback to default sound if custom sound fails
+            if (file !== 'buzz_alarm.wav') {
+              const fallback = new Sound('buzz_alarm.wav', Sound.MAIN_BUNDLE, (err2) => {
+                if (err2) { console.warn('iOS fallback sound also failed:', err2); return; }
+                fallback.setVolume(1.0);
+                fallback.setNumberOfLoops(-1);
+                fallback.play();
+                soundRef.current = fallback;
+              });
+            }
+            return;
+          }
+          s.setVolume(1.0);
+          s.setNumberOfLoops(-1); // loop indefinitely
+          s.play();
+        });
+        soundRef.current = s;
       }
-      const soundId = payload.sound_id || 'buzz_alarm';
-      const file = BUZZ_SOUNDS.find(s => s.id === soundId)?.file || 'buzz_alarm.wav';
-      const s = new Sound(file, Sound.MAIN_BUNDLE, (err) => {
-        if (err) return;
-        s.setVolume(1.0);
-        s.setNumberOfLoops(-1); // loop indefinitely
-        s.play();
-      });
-      soundRef.current = s;
-      // Vibrate in a loop — pattern matches Android's BuzzerService vibration
+      // Vibrate even when muted — so user still feels the buzz
       Vibration.vibrate([0, 500, 200, 500, 200, 500, 200, 500], true);
     };
     startAlarm();

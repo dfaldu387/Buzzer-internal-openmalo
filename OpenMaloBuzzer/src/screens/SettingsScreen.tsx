@@ -16,6 +16,7 @@ const generateRandomPin = () => String(Math.floor(1000 + Math.random() * 9000));
 
 const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
   const insets = useSafeAreaInsets();
+  const isAdmin = currentUser.role === 'owner' || currentUser.role === 'manager';
   const [users, setUsers] = useState<User[]>([]);
   const [reasons, setReasons] = useState<Reason[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
@@ -53,6 +54,7 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
   };
 
   const handleAddUser = async () => {
+    if (!isAdmin) return;
     if (!newName.trim() || !newPhone.trim()) {
       showAlert('Error', 'Name and phone are required');
       return;
@@ -64,6 +66,7 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
   };
 
   const handleRemoveUser = (user: User) => {
+    if (!isAdmin) return;
     showConfirm('Remove User', `Remove ${user.name}?`, 'Remove', () => removeUser(user.id), true);
   };
 
@@ -91,6 +94,7 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
   };
 
   const handleAddReason = async () => {
+    if (!isAdmin) return;
     if (!newReasonLabel.trim()) return;
     if (reasons.length >= MAX_REASONS) {
       showAlert('Limit Reached', `Maximum ${MAX_REASONS} reasons allowed`);
@@ -101,6 +105,7 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
   };
 
   const handleRemoveReason = (reason: Reason) => {
+    if (!isAdmin) return;
     showConfirm('Remove Reason', `Remove "${reason.label}"?`, 'Remove', () => removeReason(reason.id), true);
   };
 
@@ -214,21 +219,21 @@ const styles = StyleSheet.create({
   scroll: {flex: 1},
   section: {paddingHorizontal: 16, marginBottom: 32},
   sectionHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12},
-  sectionTitle: {color: '#666', fontSize: 18, fontWeight: '700', letterSpacing: 1, marginBottom: 12},
-  addBtn: {color: '#FF4D4D', fontSize: 18, fontWeight: '600', marginBottom: 12},
+  sectionTitle: {color: '#666', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 12},
+  addBtn: {color: '#FF4D4D', fontSize: 14, fontWeight: '600', marginBottom: 12},
   addForm: {backgroundColor: '#1A1A1A', borderRadius: 12, padding: 16, marginBottom: 12},
   formInput: {backgroundColor: '#252525', color: '#fff', fontSize: 18, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 8, marginBottom: 10},
   roleRow: {flexDirection: 'row', gap: 8, marginBottom: 12},
   roleChip: {paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: '#252525'},
   roleChipActive: {backgroundColor: '#3a1515', borderWidth: 1, borderColor: '#FF4D4D'},
-  roleChipText: {color: '#888', fontSize: 18, textTransform: 'capitalize'},
+  roleChipText: {color: '#888', fontSize: 14, textTransform: 'capitalize'},
   roleChipTextActive: {color: '#FF4D4D'},
   submitBtn: {backgroundColor: '#FF4D4D', paddingVertical: 12, borderRadius: 8, alignItems: 'center'},
   submitBtnText: {color: '#fff', fontSize: 18, fontWeight: '700'},
   listItem: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1A1A1A', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 10, marginBottom: 6},
   listItemLeft: {flex: 1},
   nameRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  listItemName: {color: '#fff', fontSize: 18, fontWeight: '600'},
+  listItemName: {color: '#fff', fontSize: 16, fontWeight: '600'},
   roleBadge: {paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6},
   roleBadgeOwner: {backgroundColor: '#FF4D4D20'},
   roleBadgeManager: {backgroundColor: '#FF980020'},
@@ -237,10 +242,10 @@ const styles = StyleSheet.create({
   roleBadgeTextOwner: {color: '#FF4D4D'},
   roleBadgeTextManager: {color: '#FF9800'},
   roleBadgeTextMember: {color: '#888'},
-  listItemSub: {color: '#666', fontSize: 18, marginTop: 2},
+  listItemSub: {color: '#666', fontSize: 13, marginTop: 2},
   listItemActions: {flexDirection: 'row', gap: 16, alignItems: 'center'},
-  actionText: {color: '#888', fontSize: 18, fontWeight: '600'},
-  actionTextRole: {color: '#FF9800', fontSize: 18, fontWeight: '800'},
+  actionText: {color: '#888', fontSize: 13, fontWeight: '600'},
+  actionTextRole: {color: '#FF9800', fontSize: 16, fontWeight: '800'},
   actionDanger: {color: '#F44336'},
   addReasonRow: {flexDirection: 'row', gap: 8, marginBottom: 12},
   addReasonBtn: {backgroundColor: '#FF4D4D', width: 48, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},

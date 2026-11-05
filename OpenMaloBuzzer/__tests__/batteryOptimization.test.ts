@@ -84,20 +84,24 @@ describe('promptDndAccess', () => {
     (Platform as any).OS = 'ios';
     const {promptDndAccess} = require('../src/services/batteryOptimization');
     await promptDndAccess();
-    expect(AsyncStorage.getItem).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 
-  it('skips if already prompted', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValue('true');
+  it('skips if DND access already granted', async () => {
+    NativeModules.BuzzerService = {
+      isDndAccessGranted: jest.fn().mockResolvedValue(true),
+    };
     const {promptDndAccess} = require('../src/services/batteryOptimization');
     await promptDndAccess();
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
-  it('shows DND access prompt on first call (Android)', async () => {
+  it('shows DND access prompt when not granted (Android)', async () => {
+    NativeModules.BuzzerService = {
+      isDndAccessGranted: jest.fn().mockResolvedValue(false),
+    };
     const {promptDndAccess} = require('../src/services/batteryOptimization');
     await promptDndAccess();
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@openmalo_dnd_prompted', 'true');
     expect(alertSpy).toHaveBeenCalledWith(
       'Allow Do Not Disturb Access',
       expect.stringContaining('DND'),

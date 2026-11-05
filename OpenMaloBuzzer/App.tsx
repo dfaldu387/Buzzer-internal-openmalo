@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useCallback, useRef} from 'react';
-import {StatusBar, ActivityIndicator, View, StyleSheet, AppState, NativeModules, Platform, PermissionsAndroid, DeviceEventEmitter, Linking} from 'react-native';
+import {StatusBar, ActivityIndicator, View, Text, StyleSheet, AppState, NativeModules, Platform, PermissionsAndroid, DeviceEventEmitter, Linking, TouchableOpacity} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {useAuth} from './src/hooks/useAuth';
 import {createNotificationChannel, setupNotificationListeners, cancelBuzzNotification} from './src/services/notification';
@@ -79,6 +79,8 @@ function App() {
             // Fallback if health check not available
             BuzzerService?.startService(user.id);
           });
+          // Re-check DND access on resume — user may still not have granted it
+          promptDndAccess();
           // Force Realtime re-subscribe — WebSocket often silently dies
           // after backgrounding on mobile, causing buzzes to not arrive
           setRealtimeEpoch(e => e + 1);
@@ -186,7 +188,7 @@ function App() {
 
   useEffect(() => {
     try {
-      const {getMessaging, onMessage} = require('@react-native-firebase/messaging');
+      const {getMessaging, onMessage, onNotificationOpenedApp} = require('@react-native-firebase/messaging');
       const messaging = getMessaging();
       const unsub = onMessage(messaging, (remoteMessage: any) => {
         const data = remoteMessage.data;
@@ -237,7 +239,32 @@ function App() {
           cancelBuzzNotification(data.buzz_id).catch(() => {});
         }
       });
-      return unsub;
+
+      // Handle notification tap when app was in background (not killed)
+      const unsubOpen = onNotificationOpenedApp(messaging, (remoteMessage: any) => {
+        const data = remoteMessage.data;
+        if (!data) return;
+        if (data.type === 'voice_message') {
+          setSelectedUser(null);
+          setScreen('voice-mail');
+          return;
+        }
+        if (data.buzz_id) {
+          setIncomingPayload(prev => {
+            if (prev?.buzz_id === data.buzz_id) return prev;
+            return {
+              buzz_id: data.buzz_id,
+              from_user_id: data.from_user_id || '',
+              from_user_name: data.from_user_name || 'User',
+              reason: data.reason || '',
+              note: data.note && data.note !== 'null' ? data.note : null,
+              sound_id: data.sound_id || null,
+            };
+          });
+        }
+      });
+
+      return () => { unsub(); unsubOpen(); };
     } catch (err) {
       console.warn('FCM foreground handler setup error:', err);
     }
@@ -305,7 +332,38 @@ function App() {
           return;
         }
 
-        // iOS: check if app was opened from a notifee notification (killed state)
+        // iOS: check if app was opened from a notification tap (killed state).
+        // Check both Firebase (APNs system notifications) and notifee.
+        try {
+          const {getMessaging, getInitialNotification: fcmGetInitial} = require('@react-native-firebase/messaging');
+          const fcmInitial = await fcmGetInitial(getMessaging());
+          if (fcmInitial?.data) {
+            const nData = fcmInitial.data;
+            if (nData.type === 'voice_message') {
+              setSelectedUser(null);
+              setScreen('voice-mail');
+              setPendingChecked(true);
+              return;
+            }
+            if (nData.buzz_id) {
+              setIncomingPayload(prev => {
+                if (prev?.buzz_id === nData.buzz_id) return prev;
+                return {
+                  buzz_id: nData.buzz_id as string,
+                  from_user_id: (nData.from_user_id as string) || '',
+                  from_user_name: (nData.from_user_name as string) || 'User',
+                  reason: (nData.reason as string) || '',
+                  note: nData.note && nData.note !== 'null' ? (nData.note as string) : null,
+                  sound_id: (nData.sound_id as string) || null,
+                };
+              });
+              setPendingChecked(true);
+              return;
+            }
+          }
+        } catch {}
+
+        // Also check notifee's initial notification (for notifee-managed notifications)
         try {
           const notifee = require('@notifee/react-native').default;
           const initial = await notifee.getInitialNotification();
@@ -461,6 +519,31 @@ function App() {
 
 const styles = StyleSheet.create({
   loadingContainer: {flex: 1, backgroundColor: '#0D0D0D', alignItems: 'center', justifyContent: 'center'},
+  errorContainer: {flex: 1, backgroundColor: '#0D0D0D', alignItems: 'center', justifyContent: 'center', padding: 32},
+  errorTitle: {color: '#FF4D4D', fontSize: 24, fontWeight: '800', marginBottom: 12},
+  errorMessage: {color: '#999', fontSize: 16, textAlign: 'center', marginBottom: 24},
+  errorButton: {backgroundColor: '#FF4D4D', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12},
+  errorButtonText: {color: '#fff', fontSize: 18, fontWeight: '700'},
 });
 
-export default App;
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  state = {hasError: false};
+  static getDerivedStateFromError() { return {hasError: true}; }
+  componentDidCatch(error: Error) { console.warn('App ErrorBoundary caught:', error); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorMessage}>The app encountered an unexpected error. Please restart.</Text>
+          <TouchableOpacity style={styles.errorButton} onPress={() => this.setState({hasError: false})}>
+            <Text style={styles.errorButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default () => <ErrorBoundary><App /></ErrorBoundary>;

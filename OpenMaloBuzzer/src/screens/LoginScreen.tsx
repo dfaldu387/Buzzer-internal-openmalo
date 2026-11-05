@@ -14,9 +14,9 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {User} from '../types';
-import {resetForgottenPin} from '../services/auth';
 
 const BASE_WIDTH = 375;
 
@@ -29,6 +29,13 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Restore last used phone number
+  useEffect(() => {
+    AsyncStorage.getItem('@openmalo_last_phone').then(saved => {
+      if (saved) setPhone(saved);
+    });
+  }, []);
   const pinRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const {width, height} = useWindowDimensions();
@@ -37,13 +44,6 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [alertModal, setAlertModal] = useState<{visible: boolean; title: string; message: string}>({visible: false, title: '', message: ''});
-  const [forgotModal, setForgotModal] = useState(false);
-  const [forgotPhone, setForgotPhone] = useState('');
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
-  const [resetting, setResetting] = useState(false);
-  const newPinRef = useRef<TextInput>(null);
-  const confirmPinRef = useRef<TextInput>(null);
 
   useEffect(() => {
     const showEvent =
@@ -78,7 +78,10 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
 
     setLoading(true);
     try {
-      await onLogin(phone, pin);
+      const user = await onLogin(phone, pin);
+      if (user) {
+        AsyncStorage.setItem('@openmalo_last_phone', phone).catch(() => {});
+      }
     } catch (e: any) {
       setAlertModal({visible: true, title: 'Login Failed', message: e?.message || 'Something went wrong. Try again.'});
     } finally {
@@ -87,35 +90,11 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
   };
 
   const openForgotModal = () => {
-    setForgotPhone(phone);
-    setNewPin('');
-    setConfirmPin('');
-    setForgotModal(true);
-  };
-
-  const handleResetPin = async () => {
-    if (forgotPhone.length < 10) {
-      setAlertModal({visible: true, title: 'Error', message: 'Enter a valid phone number'});
-      return;
-    }
-    if (newPin.length !== 4) {
-      setAlertModal({visible: true, title: 'Error', message: 'Enter a 4-digit PIN'});
-      return;
-    }
-    if (newPin !== confirmPin) {
-      setAlertModal({visible: true, title: 'Error', message: 'PINs do not match'});
-      return;
-    }
-    setResetting(true);
-    try {
-      await resetForgottenPin(forgotPhone, newPin);
-      setForgotModal(false);
-      setAlertModal({visible: true, title: 'PIN Reset', message: 'Your PIN has been reset. You can now login with your new PIN.'});
-    } catch (e: any) {
-      setAlertModal({visible: true, title: 'Reset Failed', message: e?.message || 'Something went wrong'});
-    } finally {
-      setResetting(false);
-    }
+    setAlertModal({
+      visible: true,
+      title: 'Forgot PIN?',
+      message: 'Contact your manager or admin to reset your PIN from the Settings screen.',
+    });
   };
 
   const bottomPadding = keyboardVisible
@@ -160,8 +139,9 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
           style={[
             styles.input,
             {fontSize: 16 * scale, paddingVertical: 14 * scale},
+            phone.length > 0 && phone.length < 10 && {borderColor: '#F44336'},
           ]}
-          placeholder="Phone number"
+          placeholder="Phone number (min 10 digits)"
           placeholderTextColor="#999"
           keyboardType="phone-pad"
           value={phone}
@@ -170,6 +150,9 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
           returnKeyType="next"
           onSubmitEditing={() => pinRef.current?.focus()}
         />
+        {phone.length > 0 && phone.length < 10 && (
+          <Text style={{color: '#F44336', fontSize: 12 * scale, marginTop: 2}}>Phone number must be at least 10 digits</Text>
+        )}
 
         <TextInput
           ref={pinRef}
@@ -247,71 +230,6 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
         </View>
       </Modal>
 
-      <Modal
-        visible={forgotModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setForgotModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <View style={[styles.modalIconWrap, {backgroundColor: '#1a2a1a'}]}>
-              <Icon name="lock-reset" size={32} color="#4CAF50" />
-            </View>
-            <Text style={styles.modalTitle}>Reset PIN</Text>
-            <Text style={styles.modalMessage}>Enter your phone number and set a new PIN</Text>
-            <TextInput
-              style={styles.forgotInput}
-              placeholder="Phone number"
-              placeholderTextColor="#666"
-              keyboardType="phone-pad"
-              value={forgotPhone}
-              onChangeText={t => setForgotPhone(t.replace(/[^0-9]/g, ''))}
-              maxLength={15}
-              returnKeyType="next"
-              onSubmitEditing={() => newPinRef.current?.focus()}
-            />
-            <TextInput
-              ref={newPinRef}
-              style={styles.forgotInput}
-              placeholder="New 4-digit PIN"
-              placeholderTextColor="#666"
-              keyboardType="number-pad"
-              secureTextEntry
-              value={newPin}
-              onChangeText={setNewPin}
-              maxLength={4}
-              returnKeyType="next"
-              onSubmitEditing={() => confirmPinRef.current?.focus()}
-            />
-            <TextInput
-              ref={confirmPinRef}
-              style={styles.forgotInput}
-              placeholder="Confirm PIN"
-              placeholderTextColor="#666"
-              keyboardType="number-pad"
-              secureTextEntry
-              value={confirmPin}
-              onChangeText={setConfirmPin}
-              maxLength={4}
-              returnKeyType="done"
-              onSubmitEditing={handleResetPin}
-            />
-            <View style={styles.forgotButtons}>
-              <TouchableOpacity
-                style={styles.forgotCancelBtn}
-                onPress={() => setForgotModal(false)}>
-                <Text style={styles.forgotCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.forgotResetBtn, (resetting || forgotPhone.length < 10 || newPin.length !== 4 || confirmPin.length !== 4) && {opacity: 0.4}]}
-                onPress={handleResetPin}
-                disabled={resetting || forgotPhone.length < 10 || newPin.length !== 4 || confirmPin.length !== 4}>
-                {resetting ? <ActivityIndicator color="#fff" /> : <Text style={styles.forgotResetText}>Reset PIN</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 };
@@ -430,50 +348,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalBtnText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  forgotInput: {
-    backgroundColor: '#252525',
-    color: '#fff',
-    fontSize: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#333',
-    width: '100%',
-  },
-  forgotButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-    marginTop: 8,
-  },
-  forgotCancelBtn: {
-    flex: 1,
-    backgroundColor: '#252525',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  forgotCancelText: {
-    color: '#ccc',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  forgotResetBtn: {
-    flex: 1,
-    backgroundColor: '#4CAF50',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  forgotResetText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',

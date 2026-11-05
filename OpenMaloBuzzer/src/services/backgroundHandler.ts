@@ -3,7 +3,6 @@ import notifee, {
   EventType,
   AndroidImportance,
   AndroidVisibility,
-  IOSNotificationCategoryAction,
 } from '@notifee/react-native';
 import {NOTIFICATION_CHANNEL_ID, VOICEMAIL_CHANNEL_ID, VOICEMAIL_CHANNEL_NAME} from '../constants';
 
@@ -14,13 +13,25 @@ export const setupBackgroundHandler = () => {
       const buzzId = detail.notification?.data?.buzz_id as string;
       const actionId = detail.pressAction.id;
       if (buzzId && ['ack', 'five_min', 'busy'].includes(actionId)) {
+        let responded = false;
         try {
           const {respondToBuzz} = require('./firebase');
           await respondToBuzz(buzzId, actionId as any);
+          responded = true;
         } catch (err) {
           console.warn('Background respond error:', err);
+          // Retry once after a short delay
+          try {
+            const {respondToBuzz} = require('./firebase');
+            await respondToBuzz(buzzId, actionId as any);
+            responded = true;
+          } catch (retryErr) {
+            console.warn('Background respond retry also failed:', retryErr);
+          }
         }
-        await notifee.cancelNotification(buzzId);
+        if (responded) {
+          await notifee.cancelNotification(buzzId);
+        }
       }
     }
   });
@@ -36,7 +47,17 @@ export const setupBackgroundHandler = () => {
 
       if (data.type === 'buzz') {
         console.log(`[T5] FCM background handler received buzz ${data.buzz_id} at ${Date.now()}`);
-        // Always try to deliver directly to BuzzerService (starts it if dead)
+        // On iOS, the APNs notification from the edge function already
+        // displays with alert, sound, and action buttons (via category).
+        // Do NOT cancel or replace it — notifee.displayNotification from
+        // a background handler is unreliable on iOS and was causing the
+        // notification to disappear silently.
+        if (Platform.OS === 'ios') {
+          console.log(`[T5] iOS bg handler: letting APNs notification stand for buzz ${data.buzz_id}`);
+          return;
+        }
+
+        // Android: deliver directly to BuzzerService (starts it if dead)
         // This gives full alarm: max volume, silent/DND override, vibration
         const tryShowBuzz = async (): Promise<boolean> => {
           try {
@@ -57,33 +78,14 @@ export const setupBackgroundHandler = () => {
 
         // Try once, retry after a short delay if it fails (Android 12+ bg restrictions)
         let started = await tryShowBuzz();
-        if (!started && Platform.OS === 'android') {
+        if (!started) {
           await new Promise<void>(r => setTimeout(r, 300));
           started = await tryShowBuzz();
         }
         if (started) return; // Service handled it with full alarm
 
-        // Service couldn't start (OS blocked it, or iOS) — show notifee notification as fallback
+        // Service couldn't start (OS blocked it) — show notifee notification as fallback
         const senderName = data.from_user_name || 'User';
-
-        // On iOS, cancel the system APNs notification to avoid duplicate with our notifee one
-        if (Platform.OS === 'ios' && data.buzz_id) {
-          try {
-            await notifee.cancelAllNotifications();
-          } catch {}
-        }
-
-        // Set up iOS notification category with action buttons
-        if (Platform.OS === 'ios') {
-          await notifee.setNotificationCategories([{
-            id: 'buzz_actions',
-            actions: [
-              {id: 'ack', title: 'Ack', foreground: false} as IOSNotificationCategoryAction,
-              {id: 'five_min', title: '5 min', foreground: false} as IOSNotificationCategoryAction,
-              {id: 'busy', title: 'Busy', destructive: true, foreground: false} as IOSNotificationCategoryAction,
-            ],
-          }]);
-        }
 
         // Use sender-selected sound from FCM data
         const buzzSoundName = data.sound_id || 'buzz_alarm';
@@ -128,20 +130,6 @@ export const setupBackgroundHandler = () => {
             ongoing: true,
             autoCancel: false,
           },
-          ios: {
-            // Play the custom buzz sound on this notification since we cancelled
-            // the APNs notification above to replace it with action buttons.
-            sound: `${buzzSoundName}.wav`,
-            // Critical Alerts bypass all Focus modes and DND, play at elevated
-            // volume, and wake the screen — matching Android's setBypassDnd(true)
-            // + USAGE_ALARM + FULL_WAKE_LOCK.
-            // REQUIRES: Critical Alerts entitlement from Apple.
-            // Without the entitlement, iOS silently downgrades to 'active' level.
-            critical: true,
-            criticalVolume: 1.0,
-            interruptionLevel: 'critical',
-            categoryId: 'buzz_actions',
-          },
           data: data as any,
         });
       }
@@ -178,16 +166,19 @@ export const setupBackgroundHandler = () => {
       }
 
       if (data.type === 'buzz_cancelled') {
+        // On iOS, the buzz_cancelled APNs notification from the edge function
+        // replaces the original buzz notification via apns-collapse-id.
+        // No need to cancel or create notifications here.
+        if (Platform.OS === 'ios') return;
+
         const cancellerName = data.from_user_name || 'User';
         // Stop the native BuzzerService alarm (MediaPlayer + Vibrator).
         // Without this, the native alarm keeps playing until the next poll
         // cycle (up to 10s) detects the cancellation on the server.
-        if (Platform.OS === 'android') {
-          try {
-            const {NativeModules} = require('react-native');
-            NativeModules.BuzzerService?.stopAlarm?.();
-          } catch {}
-        }
+        try {
+          const {NativeModules} = require('react-native');
+          NativeModules.BuzzerService?.stopAlarm?.();
+        } catch {}
         await notifee.cancelNotification(data.buzz_id);
         await notifee.displayNotification({
           title: 'Buzz cancelled',
@@ -198,9 +189,6 @@ export const setupBackgroundHandler = () => {
             autoCancel: true,
             timeoutAfter: 10000,
             pressAction: {id: 'default'},
-          },
-          ios: {
-            sound: 'default',
           },
         });
       }

@@ -4,6 +4,13 @@ import {User, Buzz, Reason, BuzzResponse, Group, CallLog, VoiceMail} from '../ty
 let channelId = 0;
 const uid = () => `ch_${++channelId}_${Date.now()}`;
 
+/** Safely convert created_at to epoch ms — handles both raw numbers and ISO strings. */
+const toEpochMs = (v: any): number => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') return new Date(v).getTime();
+  return 0;
+};
+
 // ─── Users ───────────────────────────────────────────────
 export const getUserName = async (userId: string): Promise<string> => {
   if (!userId) return 'User';
@@ -40,7 +47,21 @@ export const addUser = async (user: Omit<User, 'id'>) => {
 };
 
 export const removeUser = async (userId: string) => {
-  await supabase.from('users').update({is_active: false}).eq('id', userId);
+  await supabase.from('user_favorites').delete().eq('user_id', userId);
+  await supabase.from('user_tokens').delete().eq('user_id', userId);
+  await supabase.from('voice_mails').delete().or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`);
+  await supabase.from('call_logs').delete().or(`caller_id.eq.${userId},receiver_id.eq.${userId}`);
+  await supabase.from('buzzes').delete().or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`);
+  // Remove user from any groups they belong to
+  const {data: groups} = await supabase.from('groups').select('id,member_ids').contains('member_ids', [userId]);
+  if (groups) {
+    for (const g of groups) {
+      const memberIds = Array.isArray(g.member_ids) ? g.member_ids : [];
+      const updated = (memberIds as string[]).filter(id => id !== userId);
+      await supabase.from('groups').update({member_ids: updated}).eq('id', g.id);
+    }
+  }
+  await supabase.from('users').delete().eq('id', userId);
 };
 
 export const removeInactiveByPhone = async (phone: string) => {
@@ -89,6 +110,11 @@ export const respondToBuzz = async (buzzId: string, response: BuzzResponse) => {
   if (error) console.warn('respondToBuzz failed:', buzzId, error.message);
 };
 
+export const deleteBuzzes = async (buzzIds: string[]) => {
+  const {error} = await supabase.from('buzzes').delete().in('id', buzzIds);
+  if (error) console.warn('deleteBuzzes failed:', error.message);
+};
+
 export const markEscalated = async (buzzId: string) => {
   await supabase.from('buzzes').update({escalated: true}).eq('id', buzzId);
 };
@@ -124,21 +150,36 @@ export const getRecentBuzzes = async (userId: string, count = 20) => {
 
 const PAGE_SIZE = 15;
 
-export const getBuzzLogPage = async (page = 0) => {
+export const getBuzzLogPage = async (page = 0, userId?: string) => {
+  if (!userId) {
+    return {buzzes: [] as Buzz[], lastDoc: page + 1, hasMore: false};
+  }
+
   const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const from = page * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  const {data} = await supabase
-    .from('buzzes').select('*')
-    .gte('created_at', since)
-    .order('created_at', {ascending: false})
-    .range(from, to);
+  // Two explicit queries: sent by me + received by me
+  // Avoids .or() which can silently return unfiltered results
+  const [sent, received] = await Promise.all([
+    supabase.from('buzzes').select('*')
+      .eq('from_user_id', userId)
+      .gte('created_at', since),
+    supabase.from('buzzes').select('*')
+      .eq('to_user_id', userId)
+      .gte('created_at', since),
+  ]);
 
-  const buzzes = (data || []) as Buzz[];
+  // Merge, deduplicate, sort newest first
+  const merged = new Map<string, Buzz>();
+  [...(sent.data || []), ...(received.data || [])].forEach(b => merged.set(b.id, b as Buzz));
+  const allBuzzes = Array.from(merged.values()).sort((a, b) => b.created_at - a.created_at);
+
+  // Client-side pagination
+  const buzzes = allBuzzes.slice(from, to + 1);
   return {
     buzzes,
-    lastDoc: page + 1, // next page number
+    lastDoc: page + 1,
     hasMore: buzzes.length === PAGE_SIZE,
   };
 };
@@ -194,7 +235,8 @@ export const subscribeToIncomingBuzzes = (
     .then(({data}) => {
       if (data) {
         data.forEach(buzz => {
-          if (Date.now() - (buzz as Buzz).created_at < 120000) {
+          const ts = toEpochMs((buzz as Buzz).created_at);
+          if (ts > 0 && Date.now() - ts < 120000) {
             initialFetchIds.add((buzz as Buzz).id);
             callback(buzz as Buzz);
           }
@@ -206,7 +248,8 @@ export const subscribeToIncomingBuzzes = (
     .channel(uid())
     .on('postgres_changes', {event: 'INSERT', schema: 'public', table: 'buzzes', filter: `to_user_id=eq.${userId}`}, (payload) => {
       const buzz = payload.new as Buzz;
-      if (buzz.response === 'none' && Date.now() - buzz.created_at < 120000) {
+      const ts = toEpochMs(buzz.created_at);
+      if (buzz.response === 'none' && ts > 0 && Date.now() - ts < 120000) {
         callback(buzz);
       }
     })
@@ -241,7 +284,8 @@ export const subscribeToNewVoiceMails = (
     .channel(uid())
     .on('postgres_changes', {event: 'INSERT', schema: 'public', table: 'voice_mails', filter: `to_user_id=eq.${userId}`}, (payload) => {
       const mail = payload.new as VoiceMail;
-      if (!mail.listened && !mail.deleted && Date.now() - mail.created_at < 120000) {
+      const ts = toEpochMs(mail.created_at);
+      if (!mail.listened && !mail.deleted && ts > 0 && Date.now() - ts < 120000) {
         callback(mail);
       }
     })
@@ -309,6 +353,7 @@ export const createGroupBuzz = async (
   note: string | null,
   groupId: string,
   groupName: string,
+  soundId: string = 'buzz_alarm',
 ) => {
   const now = Date.now();
   const rows = memberIds.map(memberId => ({
@@ -317,6 +362,7 @@ export const createGroupBuzz = async (
     to_user_id: memberId,
     reason,
     note,
+    sound_id: soundId,
     created_at: now,
     responded_at: null,
     response: 'none',
@@ -379,6 +425,32 @@ export const markVoiceMailListened = async (mailId: string) => {
 
 export const deleteVoiceMail = async (mailId: string) => {
   await supabase.from('voice_mails').delete().eq('id', mailId);
+};
+
+// ─── Favorites ──────────────────────────────────────────
+export const getFavorites = async (userId: string) => {
+  const {data, error} = await supabase
+    .from('user_favorites')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', {ascending: true});
+  if (error) {
+    console.warn('getFavorites error:', error.message);
+    throw error;
+  }
+  return (data || []) as {id: string; user_id: string; target_user_id: string; reasons: string[]; reason_sounds?: Record<string, string>; created_at: number}[];
+};
+
+export const upsertFavorite = async (userId: string, targetUserId: string, reasons: string[], reasonSounds: Record<string, string> = {}) => {
+  const {error} = await supabase.from('user_favorites').upsert(
+    {user_id: userId, target_user_id: targetUserId, reasons, reason_sounds: reasonSounds, created_at: Date.now()},
+    {onConflict: 'user_id,target_user_id'},
+  );
+  if (error) console.warn('upsertFavorite error:', error.message);
+};
+
+export const deleteFavorite = async (userId: string, targetUserId: string) => {
+  await supabase.from('user_favorites').delete().eq('user_id', userId).eq('target_user_id', targetUserId);
 };
 
 // ─── FCM (still uses Firebase Messaging) ─────────────────

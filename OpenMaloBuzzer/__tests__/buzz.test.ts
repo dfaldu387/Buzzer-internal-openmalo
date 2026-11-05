@@ -47,6 +47,8 @@ jest.mock('@react-native-firebase/messaging', () => ({
   getMessaging: jest.fn(() => ({})),
   setBackgroundMessageHandler: jest.fn(),
   onMessage: jest.fn(() => jest.fn()),
+  onNotificationOpenedApp: jest.fn(() => jest.fn()),
+  getInitialNotification: jest.fn(() => Promise.resolve(null)),
   requestPermission: jest.fn(() => Promise.resolve(1)),
   getToken: jest.fn(() => Promise.resolve('mock-token')),
   onTokenRefresh: jest.fn(() => jest.fn()),
@@ -170,10 +172,16 @@ describe('Personal buzz — background', () => {
   let bgHandler: ((msg: any) => Promise<void>) | null = null;
 
   beforeEach(() => {
+    // Test Android fallback path (iOS returns early, letting APNs handle it)
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'android');
     bgHandler = null;
     const {setBackgroundMessageHandler} = require('@react-native-firebase/messaging');
     (setBackgroundMessageHandler as jest.Mock).mockImplementation((_m: any, h: any) => { bgHandler = h; });
     setupBackgroundHandler();
+  });
+
+  afterEach(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'ios');
   });
 
   it('shows notifee fallback notification when native service unavailable', async () => {
@@ -288,10 +296,16 @@ describe('Group buzz all — background', () => {
   let bgHandler: ((msg: any) => Promise<void>) | null = null;
 
   beforeEach(() => {
+    // Test Android fallback path (iOS returns early, letting APNs handle it)
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'android');
     bgHandler = null;
     const {setBackgroundMessageHandler} = require('@react-native-firebase/messaging');
     (setBackgroundMessageHandler as jest.Mock).mockImplementation((_m: any, h: any) => { bgHandler = h; });
     setupBackgroundHandler();
+  });
+
+  afterEach(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'ios');
   });
 
   it('each member receives their own notifee notification', async () => {

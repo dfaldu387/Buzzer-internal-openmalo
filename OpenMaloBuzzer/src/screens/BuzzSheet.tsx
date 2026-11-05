@@ -10,6 +10,7 @@ import {
   ScrollView,
   Modal,
   Alert,
+  Platform,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -19,6 +20,7 @@ import {useUsers} from '../hooks/useUsers';
 import {createBuzz, subscribeToBuzz, markEscalated, respondToBuzz} from '../services/firebase';
 import {supabase} from '../services/supabase';
 import {sendBuzzPush, sendBuzzCancelledPush, sendEscalationPush} from '../services/pushNotification';
+import {BUZZ_SOUNDS} from '../services/soundPreference';
 import {
   MAX_NOTE_LENGTH,
   REBUZZ_TIMEOUT_MS,
@@ -31,6 +33,7 @@ interface Props {
   onClose: () => void;
   initialReason?: string;
   autoSend?: boolean;
+  initialSound?: string;
 }
 
 type BuzzState = 'select' | 'sent';
@@ -54,7 +57,7 @@ const RESPONSE_CONFIG: Record<BuzzResponse, {label: string; color: string; icon:
 
 const ADD_BUZZ_DELAY_MS = 10000;
 
-const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, autoSend}) => {
+const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, autoSend, initialSound}) => {
   const insets = useSafeAreaInsets();
   const reasons = useReasons();
   const {users, isOnline} = useUsers(sender.id);
@@ -76,19 +79,25 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
   }, [initialReason, reasons]);
 
   const [note, setNote] = useState('');
+  const [selectedSound, setSelectedSound] = useState<string>(initialSound || 'buzz_alarm');
   const [buzzState, setBuzzState] = useState<BuzzState>('select');
   const [activeBuzzes, setActiveBuzzes] = useState<ActiveBuzzEntry[]>([]);
   const [showUserPicker, setShowUserPicker] = useState(false);
+  const [sending, setSending] = useState(false);
   const [tick, setTick] = useState(0);
   const sentReasonRef = useRef('');
   const sentNoteRef = useRef<string | null>(null);
+  const sentSoundRef = useRef('buzz_alarm');
   const unsubsRef = useRef<Record<string, () => void>>({});
 
   const autoSendDone = useRef(false);
+  const receiverRef = useRef(receiver);
+  receiverRef.current = receiver;
   useEffect(() => {
     if (!autoSend || !initialReason || autoSendDone.current || buzzState !== 'select') return;
     autoSendDone.current = true;
-    sendBuzzToUser(receiver, initialReason, null);
+    sendBuzzToUser(receiverRef.current, initialReason, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSend, initialReason, buzzState]);
 
   // Tick timer for elapsed updates
@@ -135,7 +144,7 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
       if (elapsed >= REBUZZ_TIMEOUT_MS) {
         toEscalate.push(buzz.id);
         markEscalated(buzz.id);
-        sendEscalationPush(buzz.receiver.id, buzz.id, sender.id, sender.name, sentReasonRef.current, sentNoteRef.current).catch(() => {});
+        sendEscalationPush(buzz.receiver.id, buzz.id, sender.id, sender.name, sentReasonRef.current, sentNoteRef.current, sentSoundRef.current).catch(() => {});
       }
     });
 
@@ -182,8 +191,23 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
   };
 
   const sendBuzzToUser = async (targetUser: User, reason: string, buzzNote: string | null) => {
+    if (sending) return;
+    setSending(true);
+
+    // Network check — quick ping to verify connectivity before sending
+    try {
+      const {supabase} = require('../services/supabase');
+      const {error} = await supabase.from('users').select('id').limit(1);
+      if (error) throw error;
+    } catch {
+      setSending(false);
+      Alert.alert('No Internet', 'Please check your internet connection and try again.');
+      return;
+    }
+
     sentReasonRef.current = reason;
     sentNoteRef.current = buzzNote;
+    sentSoundRef.current = selectedSound;
 
     const buzzData: Omit<Buzz, 'id'> = {
       from_user_id: sender.id,
@@ -191,6 +215,7 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
       to_user_id: targetUser.id,
       reason,
       note: buzzNote,
+      sound_id: selectedSound,
       created_at: Date.now(),
       responded_at: null,
       response: 'none',
@@ -203,13 +228,15 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
     try {
       doc = await createBuzz(buzzData);
     } catch (err: any) {
-      Alert.alert('Buzz Failed', 'Could not send buzz. Check your internet connection and try again.');
+      setSending(false);
+      Alert.alert('Buzz Failed', err?.message || 'Could not send buzz. Check your internet connection and try again.');
       return;
     }
+    setSending(false);
     console.log(`[T2] Buzz created: ${doc.id} at ${Date.now()} (+${Date.now() - t1}ms)`);
 
     // Send FCM push via Supabase Edge Function (for killed/background state)
-    sendBuzzPush(targetUser.id, doc.id, sender.id, sender.name, reason, buzzNote)
+    sendBuzzPush(targetUser.id, doc.id, sender.id, sender.name, reason, buzzNote, selectedSound)
       .then(() => console.log(`[T4] FCM push sent for ${doc.id} at ${Date.now()} (+${Date.now() - t1}ms)`))
       .catch(() => {});
 
@@ -223,6 +250,11 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
 
     setActiveBuzzes(prev => [...prev, newEntry]);
     setBuzzState('sent');
+
+    // Warn sender if receiver appears offline (last seen > 60s ago)
+    if (!isOnline(targetUser)) {
+      Alert.alert('Receiver Offline', `${targetUser.name} appears offline. They will be notified when they come back online.`);
+    }
 
     // Short vibration only — no sound. Playing buzz_alarm.wav here caused
     // the sender to play the same alarm as the receiver, sounding like a
@@ -309,12 +341,29 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
             autoFocus
           />
         )}
+        <TextInput
+          style={styles.noteInput}
+          placeholder="Optional note (40 chars)"
+          placeholderTextColor="#666"
+          value={note}
+          onChangeText={setNote}
+          maxLength={MAX_NOTE_LENGTH}
+        />
+        <Text style={styles.label}>Sound</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.soundScroll} contentContainerStyle={styles.soundScrollContent}>
+          {BUZZ_SOUNDS.map(s => (
+            <TouchableOpacity key={s.id} style={[styles.soundChip, selectedSound === s.id && styles.soundChipSelected]} onPress={() => setSelectedSound(s.id)}>
+              <Icon name={s.icon} size={18} color={selectedSound === s.id ? s.color : '#888'} />
+              <Text style={[styles.soundChipText, selectedSound === s.id && {color: s.color}]}>{s.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
         <TouchableOpacity
-          style={[styles.buzzButton, !(isOther ? customReason.trim() : selectedReason) && styles.buzzButtonDisabled]}
+          style={[styles.buzzButton, (sending || !(isOther ? customReason.trim() : selectedReason)) && styles.buzzButtonDisabled]}
           onPress={sendBuzz}
-          disabled={!(isOther ? customReason.trim() : selectedReason)}
+          disabled={sending || !(isOther ? customReason.trim() : selectedReason)}
           activeOpacity={0.8}>
-          <Text style={styles.buzzButtonText}>BUZZ</Text>
+          <Text style={styles.buzzButtonText}>{sending ? 'SENDING...' : 'BUZZ'}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -437,34 +486,39 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#0D0D0D', paddingHorizontal: 20},
   header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 16},
   headerTitle: {color: '#fff', fontSize: 22, fontWeight: '700'},
-  label: {color: '#888', fontSize: 18, fontWeight: '600', marginBottom: 12, marginTop: 8},
+  label: {color: '#888', fontSize: 14, fontWeight: '600', marginBottom: 12, marginTop: 8},
   chipsContainer: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
   chip: {backgroundColor: '#1A1A1A', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#333'},
   chipSelected: {backgroundColor: '#3a1515', borderColor: '#FF4D4D'},
   chipText: {color: '#ccc', fontSize: 16},
   chipTextSelected: {color: '#FF4D4D', fontWeight: '600'},
   noteInput: {backgroundColor: '#1A1A1A', color: '#fff', fontSize: 18, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 10, marginTop: 16, borderWidth: 1, borderColor: '#333'},
+  soundScroll: {maxHeight: 48, marginBottom: 4},
+  soundScrollContent: {gap: 8},
+  soundChip: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1A1A1A', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#333'},
+  soundChipSelected: {backgroundColor: '#1a1a2a', borderColor: '#64B5F6'},
+  soundChipText: {color: '#888', fontSize: 14, fontWeight: '600'},
   buzzButton: {backgroundColor: '#4CAF50', paddingVertical: 20, borderRadius: 14, alignItems: 'center', marginTop: 24},
   buzzButtonDisabled: {opacity: 0.4},
   buzzButtonText: {color: '#fff', fontSize: 24, fontWeight: '900', letterSpacing: 2},
 
   sentReason: {color: '#FF4D4D', fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 8},
-  statusSummary: {color: '#888', fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 12},
+  statusSummary: {color: '#888', fontSize: 14, fontWeight: '600', textAlign: 'center', marginBottom: 12},
 
   buzzRow: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 12, padding: 14, marginBottom: 8},
   buzzAvatar: {width: 48, height: 48, borderRadius: 24, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center', marginRight: 12, borderWidth: 2},
   buzzAvatarText: {color: '#fff', fontSize: 20, fontWeight: '700'},
   buzzInfo: {flex: 1},
-  buzzName: {color: '#fff', fontSize: 18, fontWeight: '600', marginBottom: 4},
+  buzzName: {color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4},
   buzzBadge: {flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, gap: 4},
-  buzzBadgeText: {fontSize: 18, fontWeight: '700'},
+  buzzBadgeText: {fontSize: 13, fontWeight: '700'},
   buzzRight: {alignItems: 'flex-end', gap: 6},
-  buzzElapsed: {color: '#999', fontSize: 18, fontWeight: '600'},
-  escalatedText: {color: '#FF9800', fontSize: 18, fontWeight: '600', marginTop: 2},
+  buzzElapsed: {color: '#999', fontSize: 14, fontWeight: '600'},
+  escalatedText: {color: '#FF9800', fontSize: 12, fontWeight: '600', marginTop: 2},
   callIcon: {width: 32, height: 32, borderRadius: 16, backgroundColor: '#1a3a1a', alignItems: 'center', justifyContent: 'center'},
 
   addBuzzBtn: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1A1A1A', borderRadius: 12, padding: 16, marginTop: 8, borderWidth: 1, borderColor: '#333', borderStyle: 'dashed'},
-  addBuzzBtnText: {color: '#64B5F6', fontSize: 18, fontWeight: '700'},
+  addBuzzBtnText: {color: '#64B5F6', fontSize: 15, fontWeight: '700'},
 
   endButton: {backgroundColor: '#F44336', paddingVertical: 18, borderRadius: 14, alignItems: 'center', marginBottom: 32},
   endButtonText: {color: '#fff', fontSize: 19, fontWeight: '800'},
@@ -475,16 +529,16 @@ const styles = StyleSheet.create({
   pickerSheet: {backgroundColor: '#1A1A1A', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingHorizontal: 20, maxHeight: '60%'},
   pickerHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4},
   pickerTitle: {color: '#fff', fontSize: 20, fontWeight: '800'},
-  pickerReason: {color: '#FF4D4D', fontSize: 18, fontWeight: '600', marginBottom: 16},
+  pickerReason: {color: '#FF4D4D', fontSize: 14, fontWeight: '600', marginBottom: 16},
   pickerUser: {flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#252525'},
   pickerAvatar: {width: 44, height: 44, borderRadius: 22, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center', marginRight: 12},
   pickerAvatarText: {color: '#fff', fontSize: 18, fontWeight: '700'},
   pickerDot: {position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: '#4CAF50', borderWidth: 2, borderColor: '#1A1A1A'},
   pickerDotOff: {backgroundColor: '#444'},
   pickerInfo: {flex: 1},
-  pickerName: {color: '#fff', fontSize: 18, fontWeight: '600'},
-  pickerRole: {color: '#999', fontSize: 18, textTransform: 'capitalize'},
-  pickerEmpty: {color: '#666', fontSize: 18, textAlign: 'center', paddingVertical: 24},
+  pickerName: {color: '#fff', fontSize: 16, fontWeight: '600'},
+  pickerRole: {color: '#999', fontSize: 13, textTransform: 'capitalize'},
+  pickerEmpty: {color: '#666', fontSize: 15, textAlign: 'center', paddingVertical: 24},
 });
 
 export default BuzzSheet;

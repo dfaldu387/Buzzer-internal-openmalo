@@ -12,11 +12,22 @@ import {
 } from '../services/auth';
 import {updateLastSeen, updateFcmToken, getFcmToken} from '../services/firebase';
 
-const refreshFcmToken = async (userId: string) => {
+const refreshFcmToken = async (userId: string, showWarning = false) => {
   try {
     const token = await getFcmToken();
-    if (token) await updateFcmToken(userId, token);
-  } catch {}
+    if (token) {
+      await updateFcmToken(userId, token);
+    } else if (showWarning) {
+      const {Alert} = require('react-native');
+      Alert.alert('Push Notifications', 'Could not register for push notifications. You may not receive buzzes when the app is closed.');
+    }
+  } catch (err) {
+    console.warn('FCM token refresh failed:', err);
+    if (showWarning) {
+      const {Alert} = require('react-native');
+      Alert.alert('Push Notifications', 'Could not register for push notifications. You may not receive buzzes when the app is closed.');
+    }
+  }
 };
 
 export const useAuth = () => {
@@ -37,7 +48,7 @@ export const useAuth = () => {
   // Refresh FCM token on every app open and when app returns to foreground
   useEffect(() => {
     if (!user) return;
-    refreshFcmToken(user.id);
+    refreshFcmToken(user.id, true); // warn user on first failure after login
     const sub = AppState.addEventListener('change', state => {
       if (state === 'active') refreshFcmToken(user.id);
     });

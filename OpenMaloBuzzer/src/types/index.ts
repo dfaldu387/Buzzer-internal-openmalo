@@ -19,6 +19,7 @@ export interface Buzz {
   to_user_id: string;
   reason: string;
   note: string | null;
+  sound_id?: string | null;
   created_at: number;
   responded_at: number | null;
   response: BuzzResponse;
@@ -69,4 +70,5 @@ export interface BuzzPayload {
   from_user_name: string;
   reason: string;
   note: string | null;
+  sound_id?: string | null;
 }

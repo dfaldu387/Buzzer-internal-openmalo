@@ -7,6 +7,8 @@ import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -48,6 +50,7 @@ class BuzzerService : Service() {
         const val EXTRA_FROM_USER_NAME = "from_user_name"
         const val EXTRA_REASON = "reason"
         const val EXTRA_NOTE = "note"
+        const val EXTRA_SOUND_ID = "sound_id"
         const val BUZZ_CHANNEL_ID = "openmalo_buzz"
         const val BUZZ_VISUAL_CHANNEL_ID = "openmalo_buzz_visual"
         const val VOICEMAIL_CHANNEL_ID = "openmalo_voicemail"
@@ -58,6 +61,7 @@ class BuzzerService : Service() {
         const val PREF_ACTIVE_BUZZ_FROM = "active_buzz_from"
         const val PREF_ACTIVE_BUZZ_REASON = "active_buzz_reason"
         const val PREF_ACTIVE_BUZZ_NOTE = "active_buzz_note"
+        const val PREF_ACTIVE_BUZZ_SOUND = "active_buzz_sound"
         const val POLL_INTERVAL_MS = 10000L
         const val FCM_TOKEN_REFRESH_MS = 3600000L
         const val WATCHDOG_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
@@ -75,16 +79,22 @@ class BuzzerService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var alarmWakeLock: PowerManager.WakeLock? = null
     private var mediaPlayer: MediaPlayer? = null
+    private var fallbackMediaPlayer: MediaPlayer? = null // STREAM_MUSIC fallback for DND bypass
     private var vibrator: Vibrator? = null
     private var isAlarming = false
     private var originalAlarmVolume: Int = -1
+    private var originalMusicVolume: Int = -1
     private var originalRingerMode: Int = -1
     private var originalDndMode: Int = -1
     private var audioFocusRequest: Any? = null // AudioFocusRequest on O+
     private var activeBuzzId: String? = null
+    private var activeSoundId: String = "buzz_alarm"
     private val seenBuzzIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val seenLock = Object() // guards atomic check-then-mark to prevent race duplicates
     private val handler = Handler(Looper.getMainLooper())
+    private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
+    private var networkWasLost = false
+    private var lastNetworkAvailableMs: Long = System.currentTimeMillis()
 
     // Persistent dedup: survives process restart. Key = buzzId, value = timestamp when seen.
     // Cleaned up on every poll cycle to avoid unbounded growth.
@@ -171,6 +181,7 @@ class BuzzerService : Service() {
         createBuzzVisualChannel()
         createVoiceMailChannel()
         acquireWakeLock()
+        registerNetworkCallback()
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vm.defaultVibrator
@@ -242,6 +253,7 @@ class BuzzerService : Service() {
             val fromUserName = intent?.getStringExtra(EXTRA_FROM_USER_NAME)
             val reason = intent?.getStringExtra(EXTRA_REASON) ?: ""
             val note = intent?.getStringExtra(EXTRA_NOTE)?.let { if (it.isEmpty() || it == "null") null else it }
+            val soundId = intent?.getStringExtra(EXTRA_SOUND_ID) ?: "buzz_alarm"
             val firstSeen = if (buzzId != null) synchronized(seenLock) {
                 if (isBuzzSeen(buzzId)) false else { markBuzzSeen(buzzId); true }
             } else false
@@ -254,6 +266,7 @@ class BuzzerService : Service() {
                 }
                 stopAlarm()
                 activeBuzzId = buzzId
+                activeSoundId = soundId
                 saveActiveBuzz(buzzId, fromUserId, reason, note)
                 showBuzzNotification(buzzId, fromUserId, reason, note)
                 Log.d(TAG, "[T9] Notification posted: $buzzId at ${System.currentTimeMillis()} (+${System.currentTimeMillis() - t7}ms)")
@@ -314,7 +327,9 @@ class BuzzerService : Service() {
                 val savedFrom = prefs.getString(PREF_ACTIVE_BUZZ_FROM, "") ?: ""
                 val savedReason = prefs.getString(PREF_ACTIVE_BUZZ_REASON, "") ?: ""
                 val savedNote = prefs.getString(PREF_ACTIVE_BUZZ_NOTE, null)
-                Log.d(TAG, "Recovering active buzz after restart: $savedBuzzId")
+                val savedSound = prefs.getString(PREF_ACTIVE_BUZZ_SOUND, "buzz_alarm") ?: "buzz_alarm"
+                activeSoundId = savedSound
+                Log.d(TAG, "Recovering active buzz after restart: $savedBuzzId (sound=$savedSound)")
                 // Verify the buzz is still unanswered on the server before
                 // replaying. Without this check, a buzz that was already
                 // responded to (but process killed before clearActiveBuzz)
@@ -403,6 +418,22 @@ class BuzzerService : Service() {
         super.onTaskRemoved(rootIntent)
     }
 
+    /** Safely parse created_at — handles both epoch ms (Long) and ISO 8601 strings. */
+    private fun parseCreatedAt(buzz: JSONObject): Long {
+        return try {
+            buzz.getLong("created_at")
+        } catch (_: Exception) {
+            try {
+                val str = buzz.optString("created_at", "")
+                if (str.isNotEmpty()) {
+                    java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("UTC")
+                    }.parse(str.replace("Z", "").substringBefore("+").substringBefore(".").let { it })?.time ?: 0L
+                } else 0L
+            } catch (_: Exception) { 0L }
+        }
+    }
+
     // ─── Supabase REST API helpers ─────────────────────────
     private fun supabaseGet(path: String): String? {
         var conn: HttpURLConnection? = null
@@ -488,7 +519,7 @@ class BuzzerService : Service() {
         supabasePatch("buzzes?id=eq.$buzzId", body)
     }
 
-    private fun pollForBuzzes(userId: String) {
+    private fun pollForBuzzes(userId: String, maxAgeMs: Long = 120000L) {
         Thread {
             try {
                 val json = supabaseGet("buzzes?to_user_id=eq.$userId&response=eq.none&select=*") ?: return@Thread
@@ -496,8 +527,8 @@ class BuzzerService : Service() {
                 for (i in 0 until arr.length()) {
                     val buzz = arr.getJSONObject(i)
                     val buzzId = buzz.getString("id")
-                    val createdAt = buzz.getLong("created_at")
-                    if (System.currentTimeMillis() - createdAt < 120000) {
+                    val createdAt = parseCreatedAt(buzz)
+                    if (createdAt > 0 && System.currentTimeMillis() - createdAt < maxAgeMs) {
                         // Atomic check-then-mark to prevent race with ACTION_SHOW_BUZZ on main thread
                         val firstSeen = synchronized(seenLock) {
                             if (isBuzzSeen(buzzId)) false
@@ -508,9 +539,11 @@ class BuzzerService : Service() {
                         val pollFromUserId = buzz.optString("from_user_id", "")
                         val pollReason = buzz.optString("reason", "")
                         val pollNote = buzz.optString("note", null).let { if (it == "null") null else it }
+                        val pollSoundId = buzz.optString("sound_id", "buzz_alarm").let { if (it == "null" || it.isEmpty()) "buzz_alarm" else it }
                         handler.post {
                             stopAlarm()
                             activeBuzzId = buzzId
+                            activeSoundId = pollSoundId
                             saveActiveBuzz(buzzId, pollFromUserId, pollReason, pollNote)
                             showBuzzNotification(
                                 buzzId = buzzId,
@@ -698,6 +731,59 @@ class BuzzerService : Service() {
         }
     }
 
+    // ─── Network monitoring ────────────────────────────────
+    /**
+     * Monitors connectivity changes so we can immediately poll for missed buzzes
+     * when the device comes back online (e.g., after airplane mode).
+     * The normal 2-minute age filter would drop buzzes sent while offline;
+     * the recovery poll uses a wider 10-minute window to catch them.
+     */
+    private fun registerNetworkCallback() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                val callback = object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) {
+                        Log.d(TAG, "Network available — wasLost=$networkWasLost")
+                        if (networkWasLost) {
+                            networkWasLost = false
+                            val offlineDurationMs = System.currentTimeMillis() - lastNetworkAvailableMs
+                            Log.d(TAG, "Network restored after ${offlineDurationMs / 1000}s offline — triggering recovery poll")
+                            // Recovery window: offline duration + 1 min buffer, capped at 10 min
+                            val recoveryWindowMs = (offlineDurationMs + 60000L).coerceAtMost(600000L).coerceAtLeast(120000L)
+                            handler.post {
+                                currentUserId?.let { userId ->
+                                    pollForBuzzes(userId, recoveryWindowMs)
+                                }
+                            }
+                        }
+                        lastNetworkAvailableMs = System.currentTimeMillis()
+                    }
+
+                    override fun onLost(network: Network) {
+                        Log.d(TAG, "Network lost (airplane mode / connectivity drop)")
+                        networkWasLost = true
+                    }
+                }
+                cm.registerDefaultNetworkCallback(callback)
+                connectivityCallback = callback
+                Log.d(TAG, "Network callback registered")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to register network callback: ${e.message}")
+            }
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        connectivityCallback?.let { callback ->
+            try {
+                val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                cm.unregisterNetworkCallback(callback)
+            } catch (_: Exception) {}
+        }
+        connectivityCallback = null
+    }
+
     private fun saveUserId(userId: String) {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(PREF_USER_ID, userId).apply()
     }
@@ -715,6 +801,7 @@ class BuzzerService : Service() {
             .putString(PREF_ACTIVE_BUZZ_FROM, fromUserId)
             .putString(PREF_ACTIVE_BUZZ_REASON, reason)
             .putString(PREF_ACTIVE_BUZZ_NOTE, note)
+            .putString(PREF_ACTIVE_BUZZ_SOUND, activeSoundId)
             .apply()
     }
 
@@ -724,6 +811,7 @@ class BuzzerService : Service() {
             .remove(PREF_ACTIVE_BUZZ_FROM)
             .remove(PREF_ACTIVE_BUZZ_REASON)
             .remove(PREF_ACTIVE_BUZZ_NOTE)
+            .remove(PREF_ACTIVE_BUZZ_SOUND)
             .apply()
     }
 
@@ -792,6 +880,13 @@ class BuzzerService : Service() {
 
         // 4. Request audio focus — critical for OEMs that don't exempt USAGE_ALARM
         try {
+            // Abandon any existing focus request to prevent leaking audio focus
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                (audioFocusRequest as? android.media.AudioFocusRequest)?.let {
+                    try { audioManager.abandonAudioFocusRequest(it) } catch (_: Exception) {}
+                }
+                audioFocusRequest = null
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val focusReq = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
                     .setAudioAttributes(AudioAttributes.Builder()
@@ -819,7 +914,15 @@ class BuzzerService : Service() {
             @Suppress("DEPRECATION") vibrator?.vibrate(pattern, 0)
         }
 
-        // 6. Start sound playback
+        // 6. Check in-app mute toggle — skip sound but keep vibration
+        val appMuted = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean("app_muted", false)
+        if (appMuted) {
+            Log.d(TAG, "App is muted — skipping sound playback, vibration only")
+            return
+        }
+
+        // 7. Start sound playback (primary: STREAM_ALARM)
         if (!tryStartMediaPlayer()) {
             Log.w(TAG, "MediaPlayer failed on first attempt, retrying in 500ms...")
             handler.postDelayed({
@@ -830,6 +933,31 @@ class BuzzerService : Service() {
                 }
             }, 500)
         }
+
+        // 8. Fallback: also play on STREAM_MUSIC when DND access is not granted.
+        // STREAM_ALARM handles silent/vibrate mode (independent of ringer).
+        // STREAM_MUSIC handles DND on OEMs that suppress STREAM_ALARM in DND,
+        // because music playback is rarely blocked by DND.
+        // When DND access IS granted, step 2 already disables DND, so no fallback needed.
+        val nm2 = getSystemService(NotificationManager::class.java)
+        if (!nm2.isNotificationPolicyAccessGranted) {
+            Log.d(TAG, "DND access not granted — starting fallback STREAM_MUSIC player")
+            try {
+                originalMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                val maxMusicVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusicVol, 0)
+                Log.d(TAG, "Music volume set to max: $maxMusicVol (was $originalMusicVolume)")
+            } catch (e: Exception) {
+                Log.w(TAG, "setStreamVolume(MUSIC) failed: ${e.message}")
+            }
+            if (!tryStartFallbackMediaPlayer()) {
+                handler.postDelayed({
+                    if (isAlarming && fallbackMediaPlayer == null) {
+                        tryStartFallbackMediaPlayer()
+                    }
+                }, 500)
+            }
+        }
     }
 
     private fun tryStartMediaPlayer(): Boolean {
@@ -839,8 +967,7 @@ class BuzzerService : Service() {
             mediaPlayer = null
         }
         return try {
-            val soundName = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getString("buzz_sound", "buzz_alarm") ?: "buzz_alarm"
+            val soundName = activeSoundId
             val soundUri = Uri.parse("android.resource://$packageName/raw/$soundName")
             val player = MediaPlayer()
             player.setAudioAttributes(AudioAttributes.Builder()
@@ -889,18 +1016,66 @@ class BuzzerService : Service() {
         }
     }
 
+    private fun tryStartFallbackMediaPlayer(): Boolean {
+        fallbackMediaPlayer?.let {
+            try { it.release() } catch (_: Exception) {}
+            fallbackMediaPlayer = null
+        }
+        return try {
+            val soundName = activeSoundId
+            val soundUri = Uri.parse("android.resource://$packageName/raw/$soundName")
+            val player = MediaPlayer()
+            player.setAudioAttributes(AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build())
+            player.setDataSource(this@BuzzerService, soundUri)
+            player.isLooping = true
+            player.setVolume(1.0f, 1.0f)
+            player.setOnErrorListener { mp, what, extra ->
+                Log.e(TAG, "Fallback MediaPlayer error: what=$what extra=$extra")
+                try { mp.release() } catch (_: Exception) {}
+                fallbackMediaPlayer = null
+                if (isAlarming) {
+                    handler.postDelayed({
+                        if (isAlarming && fallbackMediaPlayer == null) {
+                            tryStartFallbackMediaPlayer()
+                        }
+                    }, 300)
+                }
+                true
+            }
+            player.prepare()
+            player.start()
+            fallbackMediaPlayer = player
+            Log.d(TAG, "Fallback MediaPlayer (STREAM_MUSIC) started successfully")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Fallback MediaPlayer failed: ${e.message}")
+            fallbackMediaPlayer = null
+            false
+        }
+    }
+
     private fun stopAlarm() {
-        if (!isAlarming && mediaPlayer == null && alarmWakeLock == null) return
+        if (!isAlarming && mediaPlayer == null && fallbackMediaPlayer == null && alarmWakeLock == null) return
         Log.d(TAG, "stopAlarm: stopping alarm sequence")
         isAlarming = false
         vibrator?.cancel()
 
-        // Stop and release MediaPlayer
+        // Stop and release MediaPlayer (primary: STREAM_ALARM)
         mediaPlayer?.let {
             try { if (it.isPlaying) it.stop() } catch (_: Exception) {}
             try { it.release() } catch (_: Exception) {}
         }
         mediaPlayer = null
+
+        // Stop and release fallback MediaPlayer (STREAM_MUSIC)
+        fallbackMediaPlayer?.let {
+            try { if (it.isPlaying) it.stop() } catch (_: Exception) {}
+            try { it.release() } catch (_: Exception) {}
+        }
+        fallbackMediaPlayer = null
 
         // Release screen wake lock
         alarmWakeLock?.let { if (it.isHeld) try { it.release() } catch (_: Exception) {} }
@@ -927,6 +1102,15 @@ class BuzzerService : Service() {
                 audioManager.setStreamVolume(AudioManager.STREAM_ALARM, originalAlarmVolume, 0)
             } catch (_: Exception) {}
             originalAlarmVolume = -1
+        }
+
+        // Restore music volume (fallback player)
+        if (originalMusicVolume >= 0) {
+            try {
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalMusicVolume, 0)
+            } catch (_: Exception) {}
+            originalMusicVolume = -1
         }
 
         // Restore ringer mode
@@ -1003,6 +1187,7 @@ class BuzzerService : Service() {
                 putExtra("from_user_name", senderName)
                 putExtra("reason", reason)
                 putExtra("note", note ?: "")
+                putExtra("sound_id", activeSoundId)
             }
             val pendingIntent = PendingIntent.getActivity(this, buzzId.hashCode(), launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
@@ -1192,6 +1377,7 @@ class BuzzerService : Service() {
         stopAlarm()
         cancelActiveBuzzNotification()
         stopPolling()
+        unregisterNetworkCallback()
         // Only schedule restart if onTimeout didn't already do it
         if (!restartScheduledByTimeout && getSavedUserId() != null) {
             Log.d(TAG, "Scheduling restart from onDestroy")

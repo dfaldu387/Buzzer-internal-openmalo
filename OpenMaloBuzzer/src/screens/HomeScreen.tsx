@@ -11,6 +11,8 @@ import {
   Modal,
   Dimensions,
   AppState,
+  NativeModules,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -20,21 +22,22 @@ import {User, Group, Buzz, VoiceMail} from '../types';
 import {useUsers} from '../hooks/useUsers';
 import {useGroups} from '../hooks/useGroups';
 import {useReasons} from '../hooks/useReasons';
-import {subscribeToVoiceMails, subscribeToMissedBuzzes, markVoiceMailListened, deleteVoiceMail, subscribeToUsers} from '../services/firebase';
+import {subscribeToVoiceMails, subscribeToMissedBuzzes, markVoiceMailListened, deleteVoiceMail, subscribeToUsers, getFavorites, upsertFavorite, deleteFavorite} from '../services/firebase';
 import {supabase} from '../services/supabase';
+import {BUZZ_SOUNDS} from '../services/soundPreference';
 
-const getFavoritesKey = (userId: string) => `@openmalo_favorites_${userId}`;
 const getLogViewedKey = (userId: string) => `@openmalo_log_viewed_${userId}`;
 
 interface FavoriteEntry {
   userId: string;
   reasons: string[];
+  reasonSounds: Record<string, string>;
 }
 
 interface Props {
   currentUser: User;
   onSelectUser: (user: User) => void;
-  onBuzzAgain: (user: User, reason: string) => void;
+  onBuzzAgain: (user: User, reason: string, soundId?: string) => void;
   onEditBuzz: (user: User, reason: string) => void;
   onCallUser: (user: User) => void;
   onVoiceMail: (user?: User) => void;
@@ -71,23 +74,39 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
   const [addSelectedUser, setAddSelectedUser] = useState<User | null>(null);
   const [addSelectedReasons, setAddSelectedReasons] = useState<Set<string>>(new Set());
   const [addCustomReason, setAddCustomReason] = useState('');
+  const [addReasonSounds, setAddReasonSounds] = useState<Record<string, string>>({});
+  const [addSoundPickerReason, setAddSoundPickerReason] = useState<string | null>(null);
+  const previewRef = useRef<Sound | null>(null);
+  const [addPersonSearch, setAddPersonSearch] = useState('');
   const [deleteModal, setDeleteModal] = useState<string | null>(null);
   const [voiceDeleteId, setVoiceDeleteId] = useState<string | null>(null);
   const [logCount, setLogCount] = useState(0);
+  const [muted, setMuted] = useState(false);
   const reasonsScrollRef = useRef<ScrollView>(null);
 
-  // Load favorites from AsyncStorage (per-user)
+  // Load mute state on mount
+  useEffect(() => {
+    AsyncStorage.getItem('@openmalo_muted').then(v => { if (v === 'true') setMuted(true); });
+  }, []);
+
+  const toggleMute = () => {
+    const newVal = !muted;
+    setMuted(newVal);
+    AsyncStorage.setItem('@openmalo_muted', newVal ? 'true' : 'false');
+    if (Platform.OS === 'android') {
+      NativeModules.BuzzerService?.setMuted?.(newVal);
+    }
+  };
+
+  // Load favorites from Supabase (persists across reinstall/logout)
   useEffect(() => {
     setFavorites([]);
-    AsyncStorage.getItem(getFavoritesKey(currentUser.id)).then(data => {
-      if (data) setFavorites(JSON.parse(data));
-    }).catch(() => {});
+    getFavorites(currentUser.id).then(rows => {
+      setFavorites(rows.map(r => ({userId: r.target_user_id, reasons: r.reasons, reasonSounds: r.reason_sounds || {}})));
+    }).catch(err => {
+      console.warn('Failed to load favorites:', err?.message || JSON.stringify(err));
+    });
   }, [currentUser.id]);
-
-  const saveFavorites = async (updated: FavoriteEntry[]) => {
-    setFavorites(updated);
-    await AsyncStorage.setItem(getFavoritesKey(currentUser.id), JSON.stringify(updated)).catch(() => {});
-  };
 
   const scrollToTab = useCallback((tab: 'recent' | 'people' | 'groups' | 'voice') => {
     const index = TABS.indexOf(tab);
@@ -134,6 +153,7 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
   useEffect(() => {
     return () => {
       if (soundRef.current) { soundRef.current.stop(); soundRef.current.release(); }
+      if (previewRef.current) { previewRef.current.stop(); previewRef.current.release(); }
     };
   }, []);
 
@@ -221,50 +241,85 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
   );
 
   // ─── Add Modal Handlers ───
+  const stopPreview = () => {
+    if (previewRef.current) { previewRef.current.stop(); previewRef.current.release(); previewRef.current = null; }
+  };
+
   const openAddModal = () => {
     setAddStep('person');
     setAddSelectedUser(null);
     setAddSelectedReasons(new Set());
     setAddCustomReason('');
+    setAddReasonSounds({});
+    setAddSoundPickerReason(null);
+    setAddPersonSearch('');
     setShowAddModal(true);
+  };
+
+  const handleSoundTap = (reason: string, soundId: string) => {
+    setAddReasonSounds(prev => ({...prev, [reason]: soundId}));
+    stopPreview();
+    const file = BUZZ_SOUNDS.find(s => s.id === soundId)?.file || 'buzz_alarm.wav';
+    Sound.setCategory('Playback');
+    const s = new Sound(file, Sound.MAIN_BUNDLE, err => {
+      if (err) return;
+      s.setVolume(0.5);
+      s.setNumberOfLoops(0);
+      s.play(() => { s.release(); if (previewRef.current === s) previewRef.current = null; });
+    });
+    previewRef.current = s;
   };
 
   const selectPerson = (u: User) => {
     setAddSelectedUser(u);
-    // Pre-select reasons if already exists
     const existing = favorites.find(f => f.userId === u.id);
     setAddSelectedReasons(new Set(existing?.reasons || []));
+    setAddReasonSounds(existing?.reasonSounds || {});
+    setAddSoundPickerReason(null);
     setAddStep('reasons');
   };
 
   const toggleReason = (label: string) => {
-    setAddSelectedReasons(prev => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
+    const isSelected = addSelectedReasons.has(label);
+    const next = new Set(addSelectedReasons);
+    if (isSelected) {
+      next.delete(label);
+      setAddSoundPickerReason(p => p === label ? null : p);
+    } else {
+      next.add(label);
+      setAddSoundPickerReason(label);
+    }
+    setAddSelectedReasons(next);
   };
 
   const addCustom = () => {
     const trimmed = addCustomReason.trim();
     if (!trimmed) return;
-    setAddSelectedReasons(prev => new Set(prev).add(trimmed));
+    const next = new Set(addSelectedReasons);
+    next.add(trimmed);
+    setAddSelectedReasons(next);
     setAddCustomReason('');
+    setAddSoundPickerReason(trimmed);
     setTimeout(() => reasonsScrollRef.current?.scrollTo({y: 0, animated: true}), 100);
   };
 
   const saveEntry = () => {
     if (!addSelectedUser || addSelectedReasons.size === 0) return;
+    stopPreview();
+    const reasonsArr = Array.from(addSelectedReasons);
     const updated = favorites.filter(f => f.userId !== addSelectedUser.id);
-    updated.push({userId: addSelectedUser.id, reasons: Array.from(addSelectedReasons)});
-    saveFavorites(updated);
+    updated.push({userId: addSelectedUser.id, reasons: reasonsArr, reasonSounds: addReasonSounds});
+    setFavorites(updated);
+    upsertFavorite(currentUser.id, addSelectedUser.id, reasonsArr, addReasonSounds).catch(err => {
+      console.warn('upsertFavorite failed:', err?.message || JSON.stringify(err));
+    });
     setShowAddModal(false);
   };
 
   const deleteEntry = (userId: string) => {
     const updated = favorites.filter(f => f.userId !== userId);
-    saveFavorites(updated);
+    setFavorites(updated);
+    deleteFavorite(currentUser.id, userId).catch(() => {});
     setDeleteModal(null);
   };
 
@@ -305,6 +360,9 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
       <View style={[styles.header, {paddingTop: insets.top + 8}]}>
         <Text style={styles.title}>Buzzer</Text>
         <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerBtn} onPress={toggleMute}>
+            <Icon name={muted ? 'volume-off' : 'volume-up'} size={22} color={muted ? '#F44336' : '#888'} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.headerBtn} onPress={handleOpenHistory}>
             <Text style={styles.headerBtnText}>Log</Text>
             {logCount > 0 && (
@@ -377,11 +435,13 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
           {favorites.length > 0 ? favorites.map(fav => {
             const targetUser = users.find(u => u.id === fav.userId);
             const name = targetUser?.name || usersMap[fav.userId] || '?';
+            const online = targetUser ? isOnline(targetUser) : false;
             return (
               <View key={fav.userId} style={styles.recentCard}>
                 <View style={styles.recentCardHeader}>
                   <View style={styles.recentAvatar}>
                     <Text style={styles.recentAvatarText}>{name.charAt(0).toUpperCase()}</Text>
+                    <View style={[styles.dot, online ? styles.dotOn : styles.dotOff]} />
                   </View>
                   <Text style={styles.recentCardName}>{name}</Text>
                   {targetUser && (
@@ -393,6 +453,8 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
                     if (!targetUser) return;
                     setAddSelectedUser(targetUser);
                     setAddSelectedReasons(new Set(fav.reasons));
+                    setAddReasonSounds(fav.reasonSounds || {});
+                    setAddSoundPickerReason(null);
                     setAddStep('reasons');
                     setAddCustomReason('');
                     setShowAddModal(true);
@@ -403,18 +465,23 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
                     <Icon name="close" size={18} color="#666" />
                   </TouchableOpacity>
                 </View>
-                {fav.reasons.map(reason => (
-                  <View key={reason} style={styles.recentReasonRow}>
-                    <Text style={styles.recentReasonText} numberOfLines={1}>{reason}</Text>
-                    {targetUser ? (
-                      <TouchableOpacity style={styles.recentBuzzBtn} onPress={() => onBuzzAgain(targetUser, reason)} activeOpacity={0.7}>
-                        <Text style={styles.recentBuzzBtnText}>Buzz</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <Text style={styles.recentUnavailableText}>Unavailable</Text>
-                    )}
-                  </View>
-                ))}
+                {fav.reasons.map(reason => {
+                  const rs = fav.reasonSounds?.[reason] || 'buzz_alarm';
+                  const rsObj = BUZZ_SOUNDS.find(s => s.id === rs) || BUZZ_SOUNDS[0];
+                  return (
+                    <View key={reason} style={styles.recentReasonRow}>
+                      <Icon name={rsObj.icon} size={14} color={rsObj.color} style={{marginRight: 6}} />
+                      <Text style={styles.recentReasonText} numberOfLines={1}>{reason}</Text>
+                      {targetUser ? (
+                        <TouchableOpacity style={styles.recentBuzzBtn} onPress={() => onBuzzAgain(targetUser, reason, rs)} activeOpacity={0.7}>
+                          <Text style={styles.recentBuzzBtnText}>Buzz</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.recentUnavailableText}>Unavailable</Text>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             );
           }) : (
@@ -566,6 +633,7 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
           <View style={[styles.addModalSheet, {paddingBottom: insets.bottom + 16}]}>
             <View style={styles.addModalHeader}>
               <TouchableOpacity onPress={() => {
+                stopPreview();
                 if (addStep === 'reasons') { setAddStep('person'); return; }
                 setShowAddModal(false);
               }}>
@@ -576,8 +644,25 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
             </View>
 
             {addStep === 'person' ? (
+              <>
+              <View style={styles.addPersonSearchBar}>
+                <Icon name="search" size={18} color="#888" />
+                <TextInput
+                  style={styles.addPersonSearchInput}
+                  placeholder="Search people..."
+                  placeholderTextColor="#666"
+                  value={addPersonSearch}
+                  onChangeText={setAddPersonSearch}
+                  autoCorrect={false}
+                />
+                {addPersonSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setAddPersonSearch('')}>
+                    <Icon name="close" size={18} color="#888" />
+                  </TouchableOpacity>
+                )}
+              </View>
               <ScrollView>
-                {availableForAdd.length > 0 ? availableForAdd.map(u => (
+                {availableForAdd.filter(u => !addPersonSearch.trim() || u.name.toLowerCase().includes(addPersonSearch.trim().toLowerCase())).length > 0 ? availableForAdd.filter(u => !addPersonSearch.trim() || u.name.toLowerCase().includes(addPersonSearch.trim().toLowerCase())).map(u => (
                   <TouchableOpacity key={u.id} style={styles.addPersonRow} onPress={() => selectPerson(u)} activeOpacity={0.7}>
                     <View style={styles.addPersonAvatar}>
                       <Text style={styles.addPersonAvatarText}>{u.name.charAt(0).toUpperCase()}</Text>
@@ -591,9 +676,10 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
                     )}
                   </TouchableOpacity>
                 )) : (
-                  <View style={styles.center}><Text style={styles.emptyText}>No people available to buzz</Text></View>
+                  <View style={styles.center}><Text style={styles.emptyText}>No people found</Text></View>
                 )}
               </ScrollView>
+              </>
             ) : (
               <View style={{flex: 1}}>
                 <Text style={styles.addReasonLabel}>Add reasons for {addSelectedUser?.name}</Text>
@@ -623,20 +709,62 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
 
                 <ScrollView ref={reasonsScrollRef} style={{flex: 1}}>
                   {/* Custom reasons at top */}
-                  {Array.from(addSelectedReasons).filter(r => !reasons.some(x => x.label === r)).map(r => (
-                    <TouchableOpacity key={r} style={[styles.addReasonRow, styles.addReasonRowActive]} onPress={() => toggleReason(r)} activeOpacity={0.7}>
-                      <Text style={[styles.addReasonText, styles.addReasonTextActive]}>{r}</Text>
-                      <Icon name="check" size={18} color="#FF4D4D" />
-                    </TouchableOpacity>
-                  ))}
+                  {Array.from(addSelectedReasons).filter(r => !reasons.some(x => x.label === r)).map(r => {
+                    const soundId = addReasonSounds[r] || 'buzz_alarm';
+                    const soundObj = BUZZ_SOUNDS.find(s => s.id === soundId) || BUZZ_SOUNDS[0];
+                    return (
+                      <View key={r}>
+                        <View style={[styles.addReasonRow, styles.addReasonRowActive]}>
+                          <TouchableOpacity style={{flex: 1}} onPress={() => toggleReason(r)}>
+                            <Text style={[styles.addReasonText, styles.addReasonTextActive]}>{r}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.reasonSoundBtn} onPress={() => setAddSoundPickerReason(prev => prev === r ? null : r)}>
+                            <Icon name={soundObj.icon} size={14} color={soundObj.color} />
+                            <Text style={[styles.reasonSoundBtnText, {color: soundObj.color}]}>{soundObj.label}</Text>
+                          </TouchableOpacity>
+                        </View>
+                        {addSoundPickerReason === r && (
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reasonSoundPicker} contentContainerStyle={{gap: 6}}>
+                            {BUZZ_SOUNDS.map(s => (
+                              <TouchableOpacity key={s.id} style={[styles.addSoundChip, soundId === s.id && {backgroundColor: s.color + '20', borderColor: s.color}]} onPress={() => handleSoundTap(r, s.id)}>
+                                <Icon name={s.icon} size={14} color={soundId === s.id ? s.color : '#888'} />
+                                <Text style={[styles.addSoundChipText, soundId === s.id && {color: s.color}]}>{s.label}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        )}
+                      </View>
+                    );
+                  })}
                   {/* Pre-configured reasons */}
                   {reasons.map(r => {
                     const selected = addSelectedReasons.has(r.label);
+                    const soundId = addReasonSounds[r.label] || 'buzz_alarm';
+                    const soundObj = BUZZ_SOUNDS.find(s => s.id === soundId) || BUZZ_SOUNDS[0];
                     return (
-                      <TouchableOpacity key={r.id} style={[styles.addReasonRow, selected && styles.addReasonRowActive]} onPress={() => toggleReason(r.label)} activeOpacity={0.7}>
-                        <Text style={[styles.addReasonText, selected && styles.addReasonTextActive]}>{r.label}</Text>
-                        {selected && <Icon name="check" size={18} color="#FF4D4D" />}
-                      </TouchableOpacity>
+                      <View key={r.id}>
+                        <View style={[styles.addReasonRow, selected && styles.addReasonRowActive]}>
+                          <TouchableOpacity style={{flex: 1}} onPress={() => toggleReason(r.label)}>
+                            <Text style={[styles.addReasonText, selected && styles.addReasonTextActive]}>{r.label}</Text>
+                          </TouchableOpacity>
+                          {selected && (
+                            <TouchableOpacity style={styles.reasonSoundBtn} onPress={() => setAddSoundPickerReason(prev => prev === r.label ? null : r.label)}>
+                              <Icon name={soundObj.icon} size={14} color={soundObj.color} />
+                              <Text style={[styles.reasonSoundBtnText, {color: soundObj.color}]}>{soundObj.label}</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                        {selected && addSoundPickerReason === r.label && (
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reasonSoundPicker} contentContainerStyle={{gap: 6}}>
+                            {BUZZ_SOUNDS.map(s => (
+                              <TouchableOpacity key={s.id} style={[styles.addSoundChip, soundId === s.id && {backgroundColor: s.color + '20', borderColor: s.color}]} onPress={() => handleSoundTap(r.label, s.id)}>
+                                <Icon name={s.icon} size={14} color={soundId === s.id ? s.color : '#888'} />
+                                <Text style={[styles.addSoundChipText, soundId === s.id && {color: s.color}]}>{s.label}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        )}
+                      </View>
                     );
                   })}
                 </ScrollView>
@@ -705,7 +833,7 @@ const styles = StyleSheet.create({
   title: {fontSize: 28, fontWeight: '800', color: '#FF4D4D'},
   headerRight: {flexDirection: 'row', gap: 8, alignItems: 'center'},
   headerBtn: {backgroundColor: '#1A1A1A', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4},
-  headerBtnText: {color: '#aaa', fontSize: 18, fontWeight: '600'},
+  headerBtnText: {color: '#aaa', fontSize: 14, fontWeight: '600'},
   logBadge: {backgroundColor: '#FF4D4D', minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4},
   logBadgeText: {color: '#fff', fontSize: 10, fontWeight: '800'},
   profileBtn: {width: 36, height: 36, borderRadius: 18, backgroundColor: '#FF4D4D', alignItems: 'center', justifyContent: 'center'},
@@ -714,7 +842,7 @@ const styles = StyleSheet.create({
   tabBar: {flexDirection: 'row', paddingHorizontal: 12, marginBottom: 8, gap: 6},
   tab: {flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#1A1A1A', flexDirection: 'row', justifyContent: 'center', gap: 4},
   tabActive: {backgroundColor: '#1a2a3a', borderWidth: 1, borderColor: '#64B5F6'},
-  tabText: {color: '#888', fontSize: 18, fontWeight: '600'},
+  tabText: {color: '#888', fontSize: 13, fontWeight: '600'},
   tabTextActive: {color: '#64B5F6', fontWeight: '700'},
   tabBadge: {backgroundColor: '#FF4D4D', minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4},
   tabBadgeText: {color: '#fff', fontSize: 10, fontWeight: '800'},
@@ -724,18 +852,18 @@ const styles = StyleSheet.create({
 
   // Recent tab
   addFavBtn: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, marginBottom: 12, padding: 14, backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: '#333', borderStyle: 'dashed'},
-  addFavBtnText: {color: '#64B5F6', fontSize: 18, fontWeight: '700'},
+  addFavBtnText: {color: '#64B5F6', fontSize: 15, fontWeight: '700'},
 
   recentCard: {backgroundColor: '#1A1A1A', borderRadius: 14, marginBottom: 10, padding: 14, borderWidth: 1, borderColor: '#252525'},
   recentCardHeader: {flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4},
-  recentCardName: {color: '#fff', fontSize: 18, fontWeight: '700', flex: 1},
+  recentCardName: {color: '#fff', fontSize: 16, fontWeight: '700', flex: 1},
   recentCallBtn: {width: 34, height: 34, borderRadius: 17, backgroundColor: '#1a3a1a', alignItems: 'center', justifyContent: 'center'},
   recentIconBtn: {width: 34, height: 34, borderRadius: 17, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center'},
   recentReasonRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 4, borderTopWidth: 1, borderTopColor: '#252525'},
-  recentReasonText: {color: '#ccc', fontSize: 18, fontWeight: '500', flex: 1},
+  recentReasonText: {color: '#ccc', fontSize: 14, fontWeight: '500', flex: 1},
   recentBuzzBtn: {paddingHorizontal: 12, paddingVertical: 5, borderRadius: 6, backgroundColor: '#1a3a1a'},
-  recentBuzzBtnText: {color: '#4CAF50', fontSize: 18, fontWeight: '700'},
-  recentUnavailableText: {color: '#555', fontSize: 18, fontWeight: '600'},
+  recentBuzzBtnText: {color: '#4CAF50', fontSize: 14, fontWeight: '700'},
+  recentUnavailableText: {color: '#555', fontSize: 14, fontWeight: '600'},
   recentAvatar: {width: 38, height: 38, borderRadius: 19, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center'},
   recentAvatarText: {color: '#fff', fontSize: 18, fontWeight: '700'},
 
@@ -744,8 +872,8 @@ const styles = StyleSheet.create({
   groupRowLeft: {flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1},
   groupAvatar: {width: 42, height: 42, borderRadius: 21, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center'},
   groupRowInfo: {flex: 1},
-  groupRowName: {color: '#fff', fontSize: 18, fontWeight: '600'},
-  groupRowCount: {color: '#999', fontSize: 18, marginTop: 1},
+  groupRowName: {color: '#fff', fontSize: 16, fontWeight: '600'},
+  groupRowCount: {color: '#999', fontSize: 13, marginTop: 1},
 
   // People
   userRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10},
@@ -757,34 +885,34 @@ const styles = StyleSheet.create({
   dotOn: {backgroundColor: '#4CAF50'},
   dotOff: {backgroundColor: '#444'},
   userInfo: {flex: 1},
-  userName: {color: '#fff', fontSize: 18, fontWeight: '600'},
-  userRole: {color: '#999', fontSize: 18, marginTop: 1, textTransform: 'capitalize'},
+  userName: {color: '#fff', fontSize: 16, fontWeight: '600'},
+  userRole: {color: '#999', fontSize: 13, marginTop: 1, textTransform: 'capitalize'},
   userActions: {flexDirection: 'row', gap: 6, alignItems: 'center'},
   callBtn: {width: 36, height: 36, borderRadius: 18, backgroundColor: '#1a3a1a', alignItems: 'center', justifyContent: 'center'},
   vmBtn: {width: 36, height: 36, borderRadius: 18, backgroundColor: '#2a1515', alignItems: 'center', justifyContent: 'center'},
   buzzBtn: {backgroundColor: '#4CAF50', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8},
-  buzzBtnText: {color: '#fff', fontSize: 18, fontWeight: '700'},
+  buzzBtnText: {color: '#fff', fontSize: 14, fontWeight: '700'},
 
   badge: {backgroundColor: '#FF4D4D', minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5},
-  badgeText: {color: '#fff', fontSize: 18, fontWeight: '800'},
+  badgeText: {color: '#fff', fontSize: 12, fontWeight: '800'},
   groupActions: {flexDirection: 'row', gap: 8, alignItems: 'center'},
   groupInfoBtn: {width: 34, height: 34, borderRadius: 17, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center'},
   createGroupBtn: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 16, marginTop: 8, marginBottom: 12, padding: 14, backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: '#333', borderStyle: 'dashed'},
-  createGroupBtnText: {color: '#64B5F6', fontSize: 18, fontWeight: '700'},
+  createGroupBtnText: {color: '#64B5F6', fontSize: 15, fontWeight: '700'},
 
   // Modals
   modalOverlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32},
   modalBox: {backgroundColor: '#1A1A1A', borderRadius: 20, padding: 20, width: '100%', maxHeight: '60%', borderWidth: 1, borderColor: '#333'},
   modalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4},
   modalTitle: {color: '#fff', fontSize: 22, fontWeight: '800'},
-  modalSubtitle: {color: '#888', fontSize: 18, marginBottom: 16},
+  modalSubtitle: {color: '#888', fontSize: 14, marginBottom: 16},
   memberList: {maxHeight: 300},
   memberRow: {flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#252525'},
   memberAvatar: {width: 38, height: 38, borderRadius: 19, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center', marginRight: 12},
   memberAvatarText: {color: '#fff', fontSize: 18, fontWeight: '700'},
   memberInfo: {flex: 1},
-  memberName: {color: '#fff', fontSize: 18, fontWeight: '600'},
-  memberRole: {color: '#999', fontSize: 18, textTransform: 'capitalize'},
+  memberName: {color: '#fff', fontSize: 16, fontWeight: '600'},
+  memberRole: {color: '#999', fontSize: 13, textTransform: 'capitalize'},
   modalEditBtn: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FF9800', paddingVertical: 12, borderRadius: 12, marginTop: 12},
   modalEditBtnText: {color: '#fff', fontSize: 18, fontWeight: '700'},
 
@@ -794,8 +922,8 @@ const styles = StyleSheet.create({
   voiceAvatar: {width: 44, height: 44, borderRadius: 22, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center', marginRight: 12},
   voiceAvatarText: {color: '#fff', fontSize: 18, fontWeight: '700'},
   voiceInfo: {flex: 1},
-  voiceName: {color: '#fff', fontSize: 18, fontWeight: '600'},
-  voiceMeta: {color: '#999', fontSize: 18, marginTop: 2},
+  voiceName: {color: '#fff', fontSize: 16, fontWeight: '600'},
+  voiceMeta: {color: '#999', fontSize: 12, marginTop: 2},
   voicePlayBtn: {width: 36, height: 36, borderRadius: 18, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center'},
   voicePlayBtnActive: {backgroundColor: '#FF4D4D'},
   voiceDeleteBtn: {width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginLeft: 4},
@@ -807,13 +935,15 @@ const styles = StyleSheet.create({
   addModalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16},
   addModalBack: {color: '#FF4D4D', fontSize: 18, fontWeight: '600'},
   addModalTitle: {color: '#fff', fontSize: 18, fontWeight: '800'},
+  addPersonSearchBar: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#252525', borderRadius: 10, paddingHorizontal: 12, height: 40, gap: 8, marginBottom: 12},
+  addPersonSearchInput: {flex: 1, color: '#fff', fontSize: 15, padding: 0},
   addPersonRow: {flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#252525'},
   addPersonAvatar: {width: 40, height: 40, borderRadius: 20, backgroundColor: '#252525', alignItems: 'center', justifyContent: 'center', marginRight: 12},
   addPersonAvatarText: {color: '#fff', fontSize: 18, fontWeight: '700'},
-  addPersonName: {color: '#fff', fontSize: 18, fontWeight: '600'},
-  addPersonRole: {color: '#999', fontSize: 18, textTransform: 'capitalize'},
+  addPersonName: {color: '#fff', fontSize: 16, fontWeight: '600'},
+  addPersonRole: {color: '#999', fontSize: 13, textTransform: 'capitalize'},
   addReasonLabel: {color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 14},
-  addReasonSectionLabel: {color: '#666', fontSize: 18, fontWeight: '700', letterSpacing: 1, marginTop: 16, marginBottom: 8},
+  addReasonSectionLabel: {color: '#666', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginTop: 16, marginBottom: 8},
   addReasonRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, backgroundColor: '#252525', borderRadius: 10, marginBottom: 6},
   addReasonRowActive: {backgroundColor: '#2a1515', borderWidth: 1, borderColor: '#FF4D4D'},
   addReasonText: {color: '#ccc', fontSize: 15},
@@ -821,6 +951,11 @@ const styles = StyleSheet.create({
   addCustomRow: {flexDirection: 'row', gap: 10, marginBottom: 12},
   addCustomInput: {flex: 1, backgroundColor: '#252525', color: '#fff', fontSize: 18, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#444'},
   addCustomBtn: {backgroundColor: '#FF4D4D', width: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center'},
+  reasonSoundBtn: {flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#1A1A1A', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6},
+  reasonSoundBtnText: {fontSize: 11, fontWeight: '600'},
+  reasonSoundPicker: {maxHeight: 40, marginBottom: 6, marginTop: 2, paddingHorizontal: 4},
+  addSoundChip: {flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#252525', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5, borderColor: '#333'},
+  addSoundChipText: {color: '#888', fontSize: 11, fontWeight: '600'},
   addSaveBtn: {backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 12, alignItems: 'center'},
   addSaveBtnText: {color: '#fff', fontSize: 18, fontWeight: '700'},
 

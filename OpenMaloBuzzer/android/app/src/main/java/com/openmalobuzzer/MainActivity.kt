@@ -48,6 +48,7 @@ class MainActivity : ReactActivity() {
       putString("from_user_name", intent.getStringExtra("from_user_name") ?: "")
       putString("reason", intent.getStringExtra("reason") ?: "")
       putString("note", intent.getStringExtra("note") ?: "")
+      putString("sound_id", intent.getStringExtra("sound_id") ?: "buzz_alarm")
     }
     // Clear the extras so we don't re-process
     intent.removeExtra("buzz_id")

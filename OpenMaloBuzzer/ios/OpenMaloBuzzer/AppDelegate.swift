@@ -3,6 +3,7 @@ import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
 import FirebaseCore
+import FirebaseMessaging
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -16,6 +17,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
     FirebaseApp.configure()
+
+    // Register with APNs early so the device token is available
+    // as soon as the user grants notification permission from JS.
+    // Do NOT set UNUserNotificationCenter.delegate here — notifee
+    // sets itself as the delegate to handle action button presses
+    // (Ack, 5min, Busy) via onBackgroundEvent.
+    application.registerForRemoteNotifications()
 
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
@@ -36,6 +44,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     return true
+  }
+
+  // MARK: APNs Token Forwarding
+
+  func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    // Forward APNs token to Firebase so FCM can deliver push notifications.
+    // Firebase swizzling normally handles this, but explicit forwarding
+    // is a safety net for Swift AppDelegates where swizzling can be unreliable.
+    Messaging.messaging().apnsToken = deviceToken
   }
 
   // MARK: UISceneSession Lifecycle

@@ -32,6 +32,8 @@ jest.mock('@react-native-firebase/messaging', () => ({
   getToken: jest.fn(() => Promise.resolve('mock-fcm-token')),
   setBackgroundMessageHandler: jest.fn(),
   onMessage: jest.fn(() => jest.fn()),
+  onNotificationOpenedApp: jest.fn(() => jest.fn()),
+  getInitialNotification: jest.fn(() => Promise.resolve(null)),
   requestPermission: jest.fn(() => Promise.resolve(1)),
   onTokenRefresh: jest.fn(() => jest.fn()),
 }));
@@ -57,7 +59,7 @@ describe('auth — getStoredUser', () => {
     expect(AsyncStorage.getItem).toHaveBeenCalledWith(AUTH_KEY);
   });
 
-  it('restores a stored user with empty pin_hash', async () => {
+  it('restores a stored user with sentinel pin_hash', async () => {
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
       JSON.stringify({id: 'u1', name: 'Alice', phone: '1234567890', role: 'member', last_seen_at: 100, is_active: true}),
     );
@@ -65,7 +67,7 @@ describe('auth — getStoredUser', () => {
     const user = await getStoredUser();
     expect(user).not.toBeNull();
     expect(user!.id).toBe('u1');
-    expect(user!.pin_hash).toBe('');
+    expect(user!.pin_hash).toBe('__stored_locally__');
   });
 });
 

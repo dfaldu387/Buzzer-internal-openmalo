@@ -14,6 +14,8 @@ jest.mock('@react-native-firebase/messaging', () => ({
   getMessaging: jest.fn(() => ({})),
   setBackgroundMessageHandler: jest.fn(),
   onMessage: jest.fn(() => jest.fn()),
+  onNotificationOpenedApp: jest.fn(() => jest.fn()),
+  getInitialNotification: jest.fn(() => Promise.resolve(null)),
   requestPermission: jest.fn(() => Promise.resolve(1)),
   getToken: jest.fn(() => Promise.resolve('mock-token')),
   onTokenRefresh: jest.fn(() => jest.fn()),
@@ -46,7 +48,23 @@ beforeEach(() => {
   setupBackgroundHandler();
 });
 
-describe('background handler — buzz type', () => {
+describe('background handler — buzz type (iOS)', () => {
+  it('lets APNs notification stand on iOS (no notifee replacement)', async () => {
+    await bgHandler!({data: {type: 'buzz', buzz_id: 'b1', from_user_id: 's1', from_user_name: 'Alice', reason: 'Call me', note: 'Room 4'}});
+    const notifee = require('@notifee/react-native').default;
+    expect(notifee.displayNotification).not.toHaveBeenCalled();
+    expect(notifee.cancelAllNotifications).not.toHaveBeenCalled();
+  });
+});
+
+describe('background handler — buzz type (Android)', () => {
+  beforeEach(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'android');
+  });
+  afterEach(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'ios');
+  });
+
   it('shows notifee notification as fallback', async () => {
     await bgHandler!({data: {type: 'buzz', buzz_id: 'b1', from_user_id: 's1', from_user_name: 'Alice', reason: 'Call me', note: 'Room 4'}});
     const notifee = require('@notifee/react-native').default;
@@ -96,7 +114,23 @@ describe('background handler — voice_message type', () => {
   });
 });
 
-describe('background handler — buzz_cancelled type', () => {
+describe('background handler — buzz_cancelled type (iOS)', () => {
+  it('returns early on iOS (APNs collapse-id handles replacement)', async () => {
+    await bgHandler!({data: {type: 'buzz_cancelled', buzz_id: 'bc1', from_user_name: 'Alice'}});
+    const notifee = require('@notifee/react-native').default;
+    expect(notifee.cancelNotification).not.toHaveBeenCalled();
+    expect(notifee.displayNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('background handler — buzz_cancelled type (Android)', () => {
+  beforeEach(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'android');
+  });
+  afterEach(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'ios');
+  });
+
   it('cancels buzz notification and shows cancellation notice', async () => {
     await bgHandler!({data: {type: 'buzz_cancelled', buzz_id: 'bc1', from_user_name: 'Alice'}});
     const notifee = require('@notifee/react-native').default;

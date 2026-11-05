@@ -43,6 +43,8 @@ jest.mock('@react-native-firebase/messaging', () => ({
   getMessaging: jest.fn(() => ({})),
   setBackgroundMessageHandler: jest.fn(),
   onMessage: jest.fn(() => jest.fn()),
+  onNotificationOpenedApp: jest.fn(() => jest.fn()),
+  getInitialNotification: jest.fn(() => Promise.resolve(null)),
   requestPermission: jest.fn(() => Promise.resolve(1)),
   getToken: jest.fn(() => Promise.resolve('mock-token')),
   onTokenRefresh: jest.fn(() => jest.fn()),
@@ -247,10 +249,16 @@ describe('Background — FCM background handler', () => {
   let bgHandler: ((msg: any) => Promise<void>) | null = null;
 
   beforeEach(() => {
+    // Test Android fallback path (iOS returns early, letting APNs handle it)
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'android');
     bgHandler = null;
     const {setBackgroundMessageHandler} = require('@react-native-firebase/messaging');
     (setBackgroundMessageHandler as jest.Mock).mockImplementation((_m: any, h: any) => { bgHandler = h; });
     setupBackgroundHandler();
+  });
+
+  afterEach(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'ios');
   });
 
   it('shows notifee fallback with sound on dedicated fallback channel', async () => {
@@ -262,7 +270,7 @@ describe('Background — FCM background handler', () => {
     const notifee = require('@notifee/react-native').default;
     // Fallback channel should be created
     expect(notifee.createChannel).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'openmalo_buzz_fallback',
+      id: expect.stringMatching(/^openmalo_buzz_fallback/),
       sound: 'buzz_alarm',
       vibration: true,
     }));
@@ -271,7 +279,7 @@ describe('Background — FCM background handler', () => {
       id: 'bg-1',
       title: 'Buzz from Heena',
       android: expect.objectContaining({
-        channelId: 'openmalo_buzz_fallback',
+        channelId: expect.stringMatching(/^openmalo_buzz_fallback/),
         sound: 'buzz_alarm',
       }),
     }));
@@ -285,7 +293,7 @@ describe('Background — FCM background handler', () => {
 
     const notifee = require('@notifee/react-native').default;
     const channelId = notifee.displayNotification.mock.calls[0][0].android.channelId;
-    expect(channelId).toBe('openmalo_buzz_fallback');
+    expect(channelId).toMatch(/^openmalo_buzz_fallback/);
     expect(channelId).not.toBe('openmalo_buzz');
   });
 
@@ -347,10 +355,16 @@ describe('Killed state — recovery and delivery', () => {
   let bgHandler: ((msg: any) => Promise<void>) | null = null;
 
   beforeEach(() => {
+    // Test Android fallback path (iOS returns early, letting APNs handle it)
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'android');
     bgHandler = null;
     const {setBackgroundMessageHandler} = require('@react-native-firebase/messaging');
     (setBackgroundMessageHandler as jest.Mock).mockImplementation((_m: any, h: any) => { bgHandler = h; });
     setupBackgroundHandler();
+  });
+
+  afterEach(() => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', 'ios');
   });
 
   it('each buzz gets unique ID — rapid rebuzz after kill recovery works', async () => {

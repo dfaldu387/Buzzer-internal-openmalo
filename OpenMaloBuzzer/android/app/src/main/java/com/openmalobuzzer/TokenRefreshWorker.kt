@@ -115,8 +115,8 @@ class TokenRefreshWorker(
     private fun pollForPendingBuzzes(userId: String) {
         var conn: HttpURLConnection? = null
         try {
-            val since = System.currentTimeMillis() - 120000 // last 2 minutes
-            val url = URL("${SupabaseConfig.URL}/rest/v1/buzzes?to_user_id=eq.$userId&response=eq.none&created_at=gte.$since&select=id,from_user_id,reason,note")
+            val since = System.currentTimeMillis() - 600000 // last 10 minutes (catches buzzes missed during airplane mode / network outage)
+            val url = URL("${SupabaseConfig.URL}/rest/v1/buzzes?to_user_id=eq.$userId&response=eq.none&created_at=gte.$since&select=id,from_user_id,from_user_name,reason,note,sound_id")
             conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.setRequestProperty("apikey", SupabaseConfig.ANON_KEY)
@@ -133,17 +133,20 @@ class TokenRefreshWorker(
                     val buzz = arr.getJSONObject(0) // show the most recent pending buzz
                     val buzzId = buzz.getString("id")
                     val fromUserId = buzz.optString("from_user_id", "")
+                    val fromUserName = buzz.optString("from_user_name", "").let { if (it == "null" || it.isEmpty()) "User" else it }
                     val reason = buzz.optString("reason", "")
                     val note = buzz.optString("note", "").let { if (it == "null") "" else it }
+                    val soundId = buzz.optString("sound_id", "buzz_alarm").let { if (it == "null" || it.isEmpty()) "buzz_alarm" else it }
                     Log.d(TAG, "Worker found pending buzz $buzzId — triggering SHOW_BUZZ")
                     try {
                         val showIntent = Intent(applicationContext, BuzzerService::class.java).apply {
                             action = BuzzerService.ACTION_SHOW_BUZZ
                             putExtra(BuzzerService.EXTRA_BUZZ_ID, buzzId)
                             putExtra(BuzzerService.EXTRA_FROM_USER_ID, fromUserId)
-                            putExtra(BuzzerService.EXTRA_FROM_USER_NAME, "User")
+                            putExtra(BuzzerService.EXTRA_FROM_USER_NAME, fromUserName)
                             putExtra(BuzzerService.EXTRA_REASON, reason)
                             putExtra(BuzzerService.EXTRA_NOTE, note)
+                            putExtra(BuzzerService.EXTRA_SOUND_ID, soundId)
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             applicationContext.startForegroundService(showIntent)
