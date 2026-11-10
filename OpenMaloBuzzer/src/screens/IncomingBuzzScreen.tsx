@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Sound from 'react-native-sound';
 import {BuzzPayload, BuzzResponse, Buzz} from '../types';
 import {respondToBuzz, subscribeToBuzz} from '../services/firebase';
+import {supabase} from '../services/supabase';
 import {cancelBuzzNotification} from '../services/notification';
 import {NO_RESPONSE_TIMEOUT_MS, STALE_BUZZ_THRESHOLD_MS} from '../constants';
 import {BUZZ_SOUNDS} from '../services/soundPreference';
@@ -75,14 +76,22 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
     const startAlarm = async () => {
-      // Stale buzzes (recovered after inactivity): just vibrate briefly
-      // so the user notices the screen, but skip the loud looping alarm
-      // since the sender's request may no longer be urgent.
+      // FIX: Check if buzz was already cancelled/responded BEFORE starting
+      // alarm. Without this, tapping a stale notification after cancellation
+      // plays alarm for 1-2s until Realtime catches up and dismisses.
+      try {
+        const {data: buzzRow} = await supabase.from('buzzes').select('response')
+          .eq('id', payload.buzz_id).single();
+        if (buzzRow && buzzRow.response !== 'none') {
+          onDismiss();
+          return;
+        }
+      } catch {}
+
       if (isStale) {
         Vibration.vibrate([0, 400, 200, 400]);
         return;
       }
-      // Check in-app mute toggle
       const isMuted = (await AsyncStorage.getItem('@openmalo_muted')) === 'true';
 
       if (!isMuted) {
@@ -107,8 +116,14 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
           soundRef.current = s;
         }
       }
-      // Vibrate even when muted — so user still feels the buzz
-      Vibration.vibrate([0, 500, 200, 500, 200, 500, 200, 500], true);
+      // Native BuzzerAlarmModule already handles vibration via its own Timer
+      // (every 1.5s). Don't also call Vibration.vibrate here — the duplicate
+      // vibration source can interfere with the AVAudioSession and cause the
+      // alarm to stop after ~10-15 seconds on some iOS versions.
+      // Only use JS vibration as fallback when muted (no native alarm started).
+      if (isMuted) {
+        Vibration.vibrate([0, 500, 200, 500, 200, 500, 200, 500], true);
+      }
     };
     startAlarm();
     return () => stopIOSAlarm();
@@ -134,20 +149,34 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
   }, [payload.buzz_id, onDismiss]);
 
   // Android: Trigger native alarm immediately when this screen mounts.
+  // FIX: Check if buzz was already cancelled before starting alarm.
+  // Without this, tapping a stale notification after cancellation briefly
+  // plays alarm until Realtime catches up and dismisses.
   useEffect(() => {
     if (Platform.OS === 'android') {
-      if (!isStale) {
-        NativeModules.BuzzerService?.showBuzz?.(
-          payload.buzz_id,
-          payload.from_user_id || '',
-          payload.from_user_name || 'User',
-          payload.reason || '',
-          payload.note || null,
-          payload.sound_id || 'buzz_alarm',
-        ).catch(() => {});
-      } else {
-        Vibration.vibrate([0, 400, 200, 400]);
-      }
+      const checkAndStart = async () => {
+        try {
+          const {data: buzzRow} = await supabase.from('buzzes').select('response')
+            .eq('id', payload.buzz_id).single();
+          if (buzzRow && buzzRow.response !== 'none') {
+            onDismiss();
+            return;
+          }
+        } catch {}
+        if (!isStale) {
+          NativeModules.BuzzerService?.showBuzz?.(
+            payload.buzz_id,
+            payload.from_user_id || '',
+            payload.from_user_name || 'User',
+            payload.reason || '',
+            payload.note || null,
+            payload.sound_id || 'buzz_alarm',
+          ).catch(() => {});
+        } else {
+          Vibration.vibrate([0, 400, 200, 400]);
+        }
+      };
+      checkAndStart();
       const cancelTimer = setTimeout(() => {
         NativeModules.BuzzerService?.cancelBuzzNotification?.(payload.buzz_id);
         cancelBuzzNotification(payload.buzz_id).catch(() => {});

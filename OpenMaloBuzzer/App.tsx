@@ -248,8 +248,11 @@ function App() {
         }
       });
 
-      // Handle notification tap when app was in background (not killed)
-      const unsubOpen = onNotificationOpenedApp(messaging, (remoteMessage: any) => {
+      // Handle notification tap when app was in background (not killed).
+      // FIX: Verify buzz is still active before showing IncomingBuzzScreen.
+      // A cancelled buzz's notification may still be in the notification center
+      // if the cancellation push was delayed or the app was killed.
+      const unsubOpen = onNotificationOpenedApp(messaging, async (remoteMessage: any) => {
         const data = remoteMessage.data;
         if (!data) return;
         if (data.type === 'voice_message') {
@@ -258,6 +261,12 @@ function App() {
           return;
         }
         if (data.buzz_id) {
+          // Check if buzz was already cancelled/responded
+          try {
+            const {data: buzzRow} = await supabase.from('buzzes').select('response')
+              .eq('id', data.buzz_id).single();
+            if (buzzRow && buzzRow.response !== 'none') return;
+          } catch {}
           setIncomingPayload(prev => {
             if (prev?.buzz_id === data.buzz_id) return prev;
             return {
@@ -267,7 +276,7 @@ function App() {
               reason: data.reason || '',
               note: data.note && data.note !== 'null' ? data.note : null,
               sound_id: data.sound_id || null,
-              created_at: Date.now(), // Tapped from background — treat as fresh
+              created_at: Date.now(),
             };
           });
         }
@@ -407,6 +416,25 @@ function App() {
           }
         } catch {}
 
+        // Check for buzz data stored by notifee onBackgroundEvent PRESS handler.
+        // This is the most reliable path for iOS notification taps from
+        // background/killed state — Firebase's handlers are unreliable for APNs.
+        try {
+          const tapData = await AsyncStorage.getItem('@openmalo_pending_tap');
+          if (tapData) {
+            await AsyncStorage.removeItem('@openmalo_pending_tap');
+            const parsed = JSON.parse(tapData);
+            if (parsed.buzz_id) {
+              setIncomingPayload(prev => {
+                if (prev?.buzz_id === parsed.buzz_id) return prev;
+                return parsed;
+              });
+              setPendingChecked(true);
+              return;
+            }
+          }
+        } catch {}
+
         // Safety net: check Supabase for any missed unanswered buzzes.
         // This catches buzzes sent while the app was inactive and the
         // FCM token was stale (e.g., iOS app not opened for days).
@@ -449,7 +477,13 @@ function App() {
     };
     checkPending();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') checkPending();
+      if (state === 'active') {
+        checkPending();
+        // Delayed retry — gives notifee/Firebase handlers time to store
+        // tap data before checkPending reads it. Crucial for iOS where
+        // onBackgroundEvent PRESS fires slightly after AppState 'active'.
+        setTimeout(checkPending, 1500);
+      }
     });
     return () => sub.remove();
   }, [user]);

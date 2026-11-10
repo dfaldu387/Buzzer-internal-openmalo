@@ -40,11 +40,6 @@ const refreshFcmToken = async (userId: string) => {
             'Buzzer notification sounds are turned OFF in iOS Settings.\n\nGo to: Settings → Notifications → Buzzer → turn ON "Sounds"',
           );
         }
-        if (__DEV__) {
-          Alert.alert('Notification Settings',
-            `Auth: ${settings.authorizationStatus}\nSound: ${settings.ios?.sound ?? 'unknown'}\nAlert: ${settings.ios?.alert ?? 'unknown'}\nBadge: ${settings.ios?.badge ?? 'unknown'}`
-          );
-        }
       } catch {}
     }
   } catch (err: any) {

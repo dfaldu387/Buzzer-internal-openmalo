@@ -7,8 +7,32 @@ import notifee, {
 import {NOTIFICATION_CHANNEL_ID, VOICEMAIL_CHANNEL_ID, VOICEMAIL_CHANNEL_NAME} from '../constants';
 
 export const setupBackgroundHandler = () => {
-  // Handle notification actions in background
+  // Handle notification taps and actions in background/killed state
   notifee.onBackgroundEvent(async ({type, detail}) => {
+    // Handle notification BODY tap from background/killed state.
+    // On iOS, Firebase's onNotificationOpenedApp is unreliable for
+    // APNs-delivered notifications. Store the buzz data so checkPending
+    // can pick it up when the app opens.
+    if (type === EventType.PRESS) {
+      const notif = detail.notification;
+      const nData = notif?.data || (notif as any)?.remote?.data || (notif as any)?.userInfo || {};
+      const buzzId = nData.buzz_id as string;
+      if (buzzId) {
+        try {
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          await AsyncStorage.setItem('@openmalo_pending_tap', JSON.stringify({
+            buzz_id: buzzId,
+            from_user_id: (nData.from_user_id as string) || '',
+            from_user_name: (nData.from_user_name as string) || 'User',
+            reason: (nData.reason as string) || '',
+            note: nData.note && nData.note !== 'null' ? (nData.note as string) : null,
+            sound_id: (nData.sound_id as string) || null,
+            created_at: Date.now(),
+          }));
+        } catch {}
+      }
+    }
+
     if (type === EventType.ACTION_PRESS && detail.pressAction) {
       // For APNs-delivered notifications on iOS, FCM data may be in
       // different locations depending on how notifee maps the remote
@@ -70,36 +94,15 @@ export const setupBackgroundHandler = () => {
         // behavior. The "audio" background mode in Info.plist keeps the alarm
         // playing even when the app is backgrounded.
         if (Platform.OS === 'ios') {
-          // Try to start native looping alarm (requires bridge to be initialized)
-          let alarmStarted = false;
-          try {
-            const {NativeModules} = require('react-native');
-            if (NativeModules.BuzzerAlarmModule?.startAlarm) {
-              const soundFile = `${data.sound_id || 'buzz_alarm'}.wav`;
-              await NativeModules.BuzzerAlarmModule.startAlarm(soundFile);
-              alarmStarted = true;
-            }
-          } catch (err) {
-            console.warn('iOS background alarm start failed:', err);
-          }
-
-          // Fallback: if native alarm failed (killed state, bridge not ready),
-          // create a notifee notification with sound + action buttons.
-          if (!alarmStarted) {
-            const senderName = data.from_user_name || 'User';
-            const buzzSoundFile = `${data.sound_id || 'buzz_alarm'}.wav`;
-            await notifee.displayNotification({
-              id: data.buzz_id,
-              title: `Buzz from ${senderName}`,
-              body: data.reason + (data.note && data.note !== 'null' ? ` — ${data.note}` : ''),
-              ios: {
-                sound: buzzSoundFile,
-                interruptionLevel: 'timeSensitive',
-                categoryId: 'buzz_actions',
-              },
-              data: data as any,
-            });
-          }
+          // Do NOT start BuzzerAlarmModule here. The APNs notification is
+          // already playing buzz_alarm.wav (29s file) via the system sound
+          // path. Starting BuzzerAlarmModule in background would:
+          //   1. Interrupt the APNs sound (setActive(true) steals audio focus)
+          //   2. Get killed by iOS after ~10-12s (background execution limit)
+          // Result: silence after 10-12 seconds instead of 29s APNs sound.
+          //
+          // The native looping alarm starts only when IncomingBuzzScreen
+          // mounts (user taps notification or app is in foreground).
           return;
         }
 
