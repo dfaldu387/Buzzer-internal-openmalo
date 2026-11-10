@@ -10,7 +10,15 @@ export const setupBackgroundHandler = () => {
   // Handle notification actions in background
   notifee.onBackgroundEvent(async ({type, detail}) => {
     if (type === EventType.ACTION_PRESS && detail.pressAction) {
-      const buzzId = detail.notification?.data?.buzz_id as string;
+      // For APNs-delivered notifications on iOS, FCM data may be in
+      // different locations depending on how notifee maps the remote
+      // notification. Check multiple paths to find buzz_id.
+      const notif = detail.notification;
+      const buzzId = (
+        notif?.data?.buzz_id ||
+        (notif as any)?.remote?.data?.buzz_id ||
+        (notif as any)?.userInfo?.buzz_id
+      ) as string;
       const actionId = detail.pressAction.id;
       if (buzzId && ['ack', 'five_min', 'busy'].includes(actionId)) {
         let responded = false;
@@ -31,6 +39,12 @@ export const setupBackgroundHandler = () => {
         }
         if (responded) {
           await notifee.cancelNotification(buzzId);
+          // Stop native alarm (Android BuzzerService + iOS BuzzerAlarmModule)
+          try {
+            const {NativeModules} = require('react-native');
+            NativeModules.BuzzerService?.stopAlarm?.();
+            NativeModules.BuzzerAlarmModule?.stopAlarm?.();
+          } catch {}
         }
       }
     }
@@ -47,13 +61,45 @@ export const setupBackgroundHandler = () => {
 
       if (data.type === 'buzz') {
         console.log(`[T5] FCM background handler received buzz ${data.buzz_id} at ${Date.now()}`);
-        // On iOS, the APNs notification from the edge function already
-        // displays with alert, sound, and action buttons (via category).
-        // Do NOT cancel or replace it — notifee.displayNotification from
-        // a background handler is unreliable on iOS and was causing the
-        // notification to disappear silently.
+
+        // iOS: The edge function sends a notification message (with `notification`
+        // field) so the system already displays the APNs notification with
+        // action buttons and a one-time sound. But APNs sounds play ONCE and
+        // stop — unlike Android's BuzzerService which loops at max volume.
+        // Start a native looping alarm via BuzzerAlarmModule to match Android
+        // behavior. The "audio" background mode in Info.plist keeps the alarm
+        // playing even when the app is backgrounded.
         if (Platform.OS === 'ios') {
-          console.log(`[T5] iOS bg handler: letting APNs notification stand for buzz ${data.buzz_id}`);
+          // Try to start native looping alarm (requires bridge to be initialized)
+          let alarmStarted = false;
+          try {
+            const {NativeModules} = require('react-native');
+            if (NativeModules.BuzzerAlarmModule?.startAlarm) {
+              const soundFile = `${data.sound_id || 'buzz_alarm'}.wav`;
+              await NativeModules.BuzzerAlarmModule.startAlarm(soundFile);
+              alarmStarted = true;
+            }
+          } catch (err) {
+            console.warn('iOS background alarm start failed:', err);
+          }
+
+          // Fallback: if native alarm failed (killed state, bridge not ready),
+          // create a notifee notification with sound + action buttons.
+          if (!alarmStarted) {
+            const senderName = data.from_user_name || 'User';
+            const buzzSoundFile = `${data.sound_id || 'buzz_alarm'}.wav`;
+            await notifee.displayNotification({
+              id: data.buzz_id,
+              title: `Buzz from ${senderName}`,
+              body: data.reason + (data.note && data.note !== 'null' ? ` — ${data.note}` : ''),
+              ios: {
+                sound: buzzSoundFile,
+                interruptionLevel: 'timeSensitive',
+                categoryId: 'buzz_actions',
+              },
+              data: data as any,
+            });
+          }
           return;
         }
 
@@ -84,21 +130,10 @@ export const setupBackgroundHandler = () => {
         }
         if (started) return; // Service handled it with full alarm
 
-        // Service couldn't start (OS blocked it) — show notifee notification as fallback
+        // Service couldn't start (OS blocked it) — show notifee notification with sound.
         const senderName = data.from_user_name || 'User';
-
-        // Use sender-selected sound from FCM data
         const buzzSoundName = data.sound_id || 'buzz_alarm';
 
-        // Create a notifee-managed buzz channel for the fallback path.
-        // This is separate from the native BuzzerService.createBuzzChannel()
-        // which uses USAGE_ALARM. Notifee cannot set USAGE_ALARM, but it CAN
-        // play the alarm sound file on a HIGH importance channel. Using the
-        // native channel ID here would cause notifee to overwrite the native
-        // USAGE_ALARM settings with USAGE_NOTIFICATION, breaking DND bypass
-        // for the native path. A dedicated fallback channel avoids this.
-        // Android locks channel settings after creation (Android 8+).
-        // Use a per-sound channel ID so changing sound preference takes effect.
         const FALLBACK_CHANNEL_ID = `openmalo_buzz_fallback_${buzzSoundName}`;
         await notifee.createChannel({
           id: FALLBACK_CHANNEL_ID,
@@ -135,6 +170,20 @@ export const setupBackgroundHandler = () => {
       }
 
       if (data.type === 'voice_message') {
+        if (Platform.OS === 'ios') {
+          const fromName = data.from_user_name || 'User';
+          await notifee.displayNotification({
+            title: `Voice message from ${fromName}`,
+            body: `${data.duration || '0'}s voice message`,
+            ios: {
+              sound: 'default',
+              interruptionLevel: 'timeSensitive',
+            },
+            data: {type: 'voice_message'},
+          });
+          return;
+        }
+
         await notifee.createChannel({
           id: VOICEMAIL_CHANNEL_ID,
           name: VOICEMAIL_CHANNEL_NAME,
@@ -166,10 +215,15 @@ export const setupBackgroundHandler = () => {
       }
 
       if (data.type === 'buzz_cancelled') {
-        // On iOS, the buzz_cancelled APNs notification from the edge function
-        // replaces the original buzz notification via apns-collapse-id.
-        // No need to cancel or create notifications here.
-        if (Platform.OS === 'ios') return;
+        if (Platform.OS === 'ios') {
+          await notifee.cancelNotification(data.buzz_id);
+          // Stop the native looping alarm started by startAlarm()
+          try {
+            const {NativeModules} = require('react-native');
+            NativeModules.BuzzerAlarmModule?.stopAlarm?.();
+          } catch {}
+          return;
+        }
 
         const cancellerName = data.from_user_name || 'User';
         // Stop the native BuzzerService alarm (MediaPlayer + Vibrator).

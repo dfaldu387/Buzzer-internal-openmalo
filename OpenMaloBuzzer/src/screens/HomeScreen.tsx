@@ -193,16 +193,14 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
     return unsub;
   }, [currentUser.id]);
 
-  // Log count — count buzzes since last viewed
+  // Log count — count incoming missed buzzes only
   useEffect(() => {
     const fetchLogCount = async () => {
-      const lastViewed = await AsyncStorage.getItem(getLogViewedKey(currentUser.id));
-      const since = lastViewed ? parseInt(lastViewed, 10) : Date.now();
       const {count} = await supabase
         .from('buzzes')
         .select('*', {count: 'exact', head: true})
-        .or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`)
-        .gt('created_at', since);
+        .eq('to_user_id', currentUser.id)
+        .eq('response', 'none');
       setLogCount(count || 0);
     };
     fetchLogCount();
@@ -218,9 +216,7 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
     return () => { if (interval) clearInterval(interval); sub.remove(); };
   }, [currentUser.id]);
 
-  const handleOpenHistory = async () => {
-    await AsyncStorage.setItem(getLogViewedKey(currentUser.id), String(Date.now()));
-    setLogCount(0);
+  const handleOpenHistory = () => {
     onHistory();
   };
 

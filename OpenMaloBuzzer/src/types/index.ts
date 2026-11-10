@@ -71,4 +71,5 @@ export interface BuzzPayload {
   reason: string;
   note: string | null;
   sound_id?: string | null;
+  created_at?: number | null;
 }

@@ -101,7 +101,12 @@
 	<array>
 		<string>audio</string>
 		<string>fetch</string>
+		<string>processing</string>
 		<string>remote-notification</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.openmalobuzzer.token-refresh</string>
 	</array>
 </dict>
 </plist>

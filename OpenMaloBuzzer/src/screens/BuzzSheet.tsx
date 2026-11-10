@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import Sound from 'react-native-sound';
 import {User, Buzz, BuzzResponse} from '../types';
 import {useReasons} from '../hooks/useReasons';
 import {useUsers} from '../hooks/useUsers';
@@ -80,6 +81,35 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
 
   const [note, setNote] = useState('');
   const [selectedSound, setSelectedSound] = useState<string>(initialSound || 'buzz_alarm');
+  const previewSoundRef = useRef<Sound | null>(null);
+
+  const previewSound = (soundId: string) => {
+    // Stop any currently playing preview
+    if (previewSoundRef.current) {
+      previewSoundRef.current.stop();
+      previewSoundRef.current.release();
+      previewSoundRef.current = null;
+    }
+    const soundOption = BUZZ_SOUNDS.find(s => s.id === soundId);
+    if (!soundOption) return;
+    const s = new Sound(soundOption.file, Sound.MAIN_BUNDLE, (err) => {
+      if (err) return;
+      s.setVolume(1.0);
+      s.play(() => { s.release(); if (previewSoundRef.current === s) previewSoundRef.current = null; });
+    });
+    previewSoundRef.current = s;
+  };
+
+  // Cleanup preview on unmount
+  useEffect(() => {
+    return () => {
+      if (previewSoundRef.current) {
+        previewSoundRef.current.stop();
+        previewSoundRef.current.release();
+      }
+    };
+  }, []);
+
   const [buzzState, setBuzzState] = useState<BuzzState>('select');
   const [activeBuzzes, setActiveBuzzes] = useState<ActiveBuzzEntry[]>([]);
   const [showUserPicker, setShowUserPicker] = useState(false);
@@ -237,7 +267,7 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
 
     // Send FCM push via Supabase Edge Function (for killed/background state)
     sendBuzzPush(targetUser.id, doc.id, sender.id, sender.name, reason, buzzNote, selectedSound)
-      .then(() => console.log(`[T4] FCM push sent for ${doc.id} at ${Date.now()} (+${Date.now() - t1}ms)`))
+      .then(pushResult => console.log(`[T4] FCM push result for ${doc.id}: ${pushResult} at ${Date.now()} (+${Date.now() - t1}ms)`))
       .catch(() => {});
 
     const newEntry: ActiveBuzzEntry = {
@@ -250,11 +280,6 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
 
     setActiveBuzzes(prev => [...prev, newEntry]);
     setBuzzState('sent');
-
-    // Warn sender if receiver appears offline (last seen > 60s ago)
-    if (!isOnline(targetUser)) {
-      Alert.alert('Receiver Offline', `${targetUser.name} appears offline. They will be notified when they come back online.`);
-    }
 
     // Short vibration only — no sound. Playing buzz_alarm.wav here caused
     // the sender to play the same alarm as the receiver, sounding like a
@@ -352,7 +377,7 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
         <Text style={styles.label}>Sound</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.soundScroll} contentContainerStyle={styles.soundScrollContent}>
           {BUZZ_SOUNDS.map(s => (
-            <TouchableOpacity key={s.id} style={[styles.soundChip, selectedSound === s.id && styles.soundChipSelected]} onPress={() => setSelectedSound(s.id)}>
+            <TouchableOpacity key={s.id} style={[styles.soundChip, selectedSound === s.id && styles.soundChipSelected]} onPress={() => { setSelectedSound(s.id); previewSound(s.id); }}>
               <Icon name={s.icon} size={18} color={selectedSound === s.id ? s.color : '#888'} />
               <Text style={[styles.soundChipText, selectedSound === s.id && {color: s.color}]}>{s.label}</Text>
             </TouchableOpacity>

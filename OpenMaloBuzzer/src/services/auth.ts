@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {Platform} from 'react-native';
 import {User} from '../types';
 import {getUserByPhone, addUser, removeUser, removeInactiveByPhone, updateFcmToken, updateUserProfile, resetUserPin} from './firebase';
 import {hashPin, verifyPin} from './crypto';
@@ -26,11 +27,14 @@ export const login = async (phone: string, pin: string): Promise<User | null> =>
   // FCM token update — don't block login
   setTimeout(async () => {
     try {
-      const {getMessaging, getToken} = require('@react-native-firebase/messaging');
+      const {getMessaging, getToken, requestPermission} = require('@react-native-firebase/messaging');
       const messaging = getMessaging();
+      await requestPermission(messaging);
       const token = await getToken(messaging);
-      if (token) await updateFcmToken(user.id, token);
-    } catch {}
+      if (token) await updateFcmToken(user.id, token, Platform.OS);
+    } catch (err) {
+      console.warn('FCM token update after login failed:', err);
+    }
   }, 2000);
 
   return user;
@@ -63,11 +67,14 @@ export const signup = async (
 
   setTimeout(async () => {
     try {
-      const {getMessaging, getToken} = require('@react-native-firebase/messaging');
+      const {getMessaging, getToken, requestPermission} = require('@react-native-firebase/messaging');
       const messaging = getMessaging();
+      await requestPermission(messaging);
       const token = await getToken(messaging);
-      if (token) await updateFcmToken(user.id, token);
-    } catch {}
+      if (token) await updateFcmToken(user.id, token, Platform.OS);
+    } catch (err) {
+      console.warn('FCM token update after signup failed:', err);
+    }
   }, 2000);
 
   return user;

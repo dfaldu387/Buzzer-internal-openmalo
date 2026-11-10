@@ -32,8 +32,14 @@ export const getUserByPhone = async (phone: string): Promise<User | null> => {
   return data ? (data as User) : null;
 };
 
-export const updateFcmToken = async (userId: string, token: string) => {
-  await supabase.from('user_tokens').upsert({user_id: userId, fcm_token: token, fcm_token_stale: false});
+export const updateFcmToken = async (userId: string, token: string, platform?: string) => {
+  await supabase.from('user_tokens').upsert({
+    user_id: userId,
+    fcm_token: token,
+    fcm_token_stale: false,
+    token_updated_at: Date.now(),
+    ...(platform ? {platform} : {}),
+  });
 };
 
 export const updateLastSeen = async (userId: string) => {
@@ -159,21 +165,12 @@ export const getBuzzLogPage = async (page = 0, userId?: string) => {
   const from = page * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // Two explicit queries: sent by me + received by me
-  // Avoids .or() which can silently return unfiltered results
-  const [sent, received] = await Promise.all([
-    supabase.from('buzzes').select('*')
-      .eq('from_user_id', userId)
-      .gte('created_at', since),
-    supabase.from('buzzes').select('*')
-      .eq('to_user_id', userId)
-      .gte('created_at', since),
-  ]);
+  // All buzzes (incoming + outgoing)
+  const {data} = await supabase.from('buzzes').select('*')
+    .or(`to_user_id.eq.${userId},from_user_id.eq.${userId}`)
+    .gte('created_at', since);
 
-  // Merge, deduplicate, sort newest first
-  const merged = new Map<string, Buzz>();
-  [...(sent.data || []), ...(received.data || [])].forEach(b => merged.set(b.id, b as Buzz));
-  const allBuzzes = Array.from(merged.values()).sort((a, b) => b.created_at - a.created_at);
+  const allBuzzes = (data || []).map(b => b as Buzz).sort((a, b) => b.created_at - a.created_at);
 
   // Client-side pagination
   const buzzes = allBuzzes.slice(from, to + 1);
@@ -236,7 +233,10 @@ export const subscribeToIncomingBuzzes = (
       if (data) {
         data.forEach(buzz => {
           const ts = toEpochMs((buzz as Buzz).created_at);
-          if (ts > 0 && Date.now() - ts < 120000) {
+          // 10-minute window on initial fetch (matches MISSED_BUZZ_WINDOW_MS).
+          // Previous 2-min window was too short — on app resume after
+          // backgrounding, buzzes sent 3-10 min ago were silently dropped.
+          if (ts > 0 && Date.now() - ts < 600000) {
             initialFetchIds.add((buzz as Buzz).id);
             callback(buzz as Buzz);
           }
@@ -249,7 +249,7 @@ export const subscribeToIncomingBuzzes = (
     .on('postgres_changes', {event: 'INSERT', schema: 'public', table: 'buzzes', filter: `to_user_id=eq.${userId}`}, (payload) => {
       const buzz = payload.new as Buzz;
       const ts = toEpochMs(buzz.created_at);
-      if (buzz.response === 'none' && ts > 0 && Date.now() - ts < 120000) {
+      if (buzz.response === 'none' && ts > 0 && Date.now() - ts < 600000) {
         callback(buzz);
       }
     })

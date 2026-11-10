@@ -1,4 +1,5 @@
 import UIKit
+import BackgroundTasks
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
@@ -24,6 +25,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // sets itself as the delegate to handle action button presses
     // (Ack, 5min, Busy) via onBackgroundEvent.
     application.registerForRemoteNotifications()
+
+    // Register BGTaskScheduler for periodic token refresh.
+    // This replaces the deprecated setMinimumBackgroundFetchInterval API.
+    // iOS decides when to run it (typically every few hours for active apps).
+    BGTaskScheduler.shared.register(
+      forTaskWithIdentifier: "com.openmalobuzzer.token-refresh",
+      using: nil
+    ) { task in
+      Self.handleTokenRefreshTask(task as! BGAppRefreshTask)
+    }
+    // Schedule the first run
+    Self.scheduleTokenRefresh()
 
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
@@ -56,6 +69,66 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // Firebase swizzling normally handles this, but explicit forwarding
     // is a safety net for Swift AppDelegates where swizzling can be unreliable.
     Messaging.messaging().apnsToken = deviceToken
+  }
+
+  func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    // Log APNs registration failure — common causes:
+    //   - Running on Simulator (no APNs support)
+    //   - Missing Push Notification capability in provisioning profile
+    //   - No APNs key uploaded in Firebase Console
+    print("[APNs] Failed to register: \(error.localizedDescription)")
+  }
+
+  // MARK: BGTaskScheduler — Periodic Token Refresh
+
+  /// Schedule the next background app refresh task.
+  /// iOS decides the actual execution time based on usage patterns.
+  static func scheduleTokenRefresh() {
+    let request = BGAppRefreshTaskRequest(
+      identifier: "com.openmalobuzzer.token-refresh"
+    )
+    // Ask iOS to run no earlier than 1 hour from now.
+    // iOS may delay further based on battery, usage patterns, etc.
+    request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)
+    do {
+      try BGTaskScheduler.shared.submit(request)
+      print("[BGTask] Token refresh scheduled")
+    } catch {
+      print("[BGTask] Failed to schedule: \(error.localizedDescription)")
+    }
+  }
+
+  /// Handle the background task when iOS grants execution time.
+  /// Re-registers APNs token and refreshes the FCM mapping so push
+  /// delivery stays alive even after days/weeks of inactivity.
+  static func handleTokenRefreshTask(_ task: BGAppRefreshTask) {
+    // Schedule the next run FIRST — if this task gets killed early,
+    // the next one is already queued.
+    scheduleTokenRefresh()
+
+    // Re-register for remote notifications to catch APNs token rotations
+    DispatchQueue.main.async {
+      UIApplication.shared.registerForRemoteNotifications()
+    }
+
+    // Refresh the FCM token mapping
+    Messaging.messaging().token { token, error in
+      if let token = token {
+        print("[BGTask] FCM token refreshed: \(token.prefix(12))...")
+        task.setTaskCompleted(success: true)
+      } else {
+        print("[BGTask] FCM token refresh failed: \(error?.localizedDescription ?? "unknown")")
+        task.setTaskCompleted(success: false)
+      }
+    }
+
+    // If iOS kills this task early, mark as failed so it retries
+    task.expirationHandler = {
+      task.setTaskCompleted(success: false)
+    }
   }
 
   // MARK: UISceneSession Lifecycle
@@ -96,6 +169,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     self.window = window
     appDelegate.window = window
     window.makeKeyAndVisible()
+  }
+
+  func sceneDidEnterBackground(_ scene: UIScene) {
+    // Re-schedule background token refresh every time the app backgrounds.
+    // This ensures the task is always queued even if the previous one ran
+    // or was cancelled by iOS.
+    AppDelegate.scheduleTokenRefresh()
   }
 }
 

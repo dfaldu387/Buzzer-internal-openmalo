@@ -6,10 +6,22 @@ import Sound from 'react-native-sound';
 import {BuzzPayload, BuzzResponse, Buzz} from '../types';
 import {respondToBuzz, subscribeToBuzz} from '../services/firebase';
 import {cancelBuzzNotification} from '../services/notification';
-import {NO_RESPONSE_TIMEOUT_MS} from '../constants';
+import {NO_RESPONSE_TIMEOUT_MS, STALE_BUZZ_THRESHOLD_MS} from '../constants';
 import {BUZZ_SOUNDS} from '../services/soundPreference';
 
 const {BuzzerAlarmModule} = NativeModules;
+
+/** Human-readable relative time string, e.g. "2 min ago", "3 hours ago". */
+const timeAgo = (epochMs: number): string => {
+  const diff = Date.now() - epochMs;
+  if (diff < 60000) return 'Just now';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
+};
 
 interface Props {
   payload: BuzzPayload;
@@ -20,6 +32,14 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
   const insets = useSafeAreaInsets();
   const soundRef = useRef<Sound | null>(null);
   const vibrationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Determine if this is a stale buzz recovered after inactivity.
+  // Stale buzzes still show the screen but skip the loud alarm to
+  // avoid a jarring alarm for something sent hours ago.
+  // Clamp to 0 so clock skew (device behind server) doesn't produce
+  // negative ages that bypass the stale check.
+  const buzzAge = payload.created_at ? Math.max(0, Date.now() - payload.created_at) : 0;
+  const isStale = buzzAge > STALE_BUZZ_THRESHOLD_MS;
 
   const stopIOSAlarm = () => {
     if (soundRef.current) {
@@ -32,16 +52,18 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
       vibrationRef.current = null;
     }
     Vibration.cancel();
-    // Deactivate audio session so ducked apps restore their volume.
-    // Equivalent to Android's abandonAudioFocusRequest().
     if (Platform.OS === 'ios') {
-      try { BuzzerAlarmModule?.deactivateAlarmSession?.()?.catch(() => {}); } catch {}
+      // Stop the native BuzzerAlarmModule alarm (may have been started by
+      // the background handler before IncomingBuzzScreen mounted).
+      // Also deactivates the audio session so ducked apps restore volume.
+      try { BuzzerAlarmModule?.stopAlarm?.(); } catch {}
     }
   };
 
   const stopAllAlarms = () => {
-    NativeModules.BuzzerService?.stopAlarm();
-    stopIOSAlarm();
+    NativeModules.BuzzerService?.stopAlarm();  // Android native service
+    BuzzerAlarmModule?.stopAlarm?.();           // iOS native module
+    stopIOSAlarm();                             // iOS react-native-sound + vibration
   };
 
   // iOS: play alarm sound + vibration since there's no native BuzzerService.
@@ -53,42 +75,37 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
     const startAlarm = async () => {
+      // Stale buzzes (recovered after inactivity): just vibrate briefly
+      // so the user notices the screen, but skip the loud looping alarm
+      // since the sender's request may no longer be urgent.
+      if (isStale) {
+        Vibration.vibrate([0, 400, 200, 400]);
+        return;
+      }
       // Check in-app mute toggle
       const isMuted = (await AsyncStorage.getItem('@openmalo_muted')) === 'true';
 
       if (!isMuted) {
-        // Always set Playback category as baseline — bypasses the mute switch.
-        // The native module call below adds .duckOthers on top of this.
-        // If the native module is unavailable, Playback alone still works.
-        Sound.setCategory('Playback');
-        // Activate alarm audio session (duck other audio on top of Playback)
+        // Use the native BuzzerAlarmModule for alarm playback.
+        // It handles audio session (.playback + .duckOthers), AVAudioPlayer
+        // looping, and vibration — all in a single atomic native call.
+        // This avoids the race condition between stopAlarm/activateSession/
+        // Sound.play that occurred with react-native-sound.
+        const soundFile = `${payload.sound_id || 'buzz_alarm'}.wav`;
         try {
-          await BuzzerAlarmModule?.activateAlarmSession?.();
+          await BuzzerAlarmModule?.startAlarm?.(soundFile);
         } catch {
-          // Native module unavailable or failed — Playback category is still set above
+          // Fallback to react-native-sound if native module unavailable
+          Sound.setCategory('Playback');
+          const file = BUZZ_SOUNDS.find(s => s.id === (payload.sound_id || 'buzz_alarm'))?.file || 'buzz_alarm.wav';
+          const s = new Sound(file, Sound.MAIN_BUNDLE, (err) => {
+            if (err) { console.warn('iOS alarm sound load failed:', err); return; }
+            s.setVolume(1.0);
+            s.setNumberOfLoops(-1);
+            s.play();
+          });
+          soundRef.current = s;
         }
-        const soundId = payload.sound_id || 'buzz_alarm';
-        const file = BUZZ_SOUNDS.find(s => s.id === soundId)?.file || 'buzz_alarm.wav';
-        const s = new Sound(file, Sound.MAIN_BUNDLE, (err) => {
-          if (err) {
-            console.warn('iOS alarm sound load failed:', file, err);
-            // Fallback to default sound if custom sound fails
-            if (file !== 'buzz_alarm.wav') {
-              const fallback = new Sound('buzz_alarm.wav', Sound.MAIN_BUNDLE, (err2) => {
-                if (err2) { console.warn('iOS fallback sound also failed:', err2); return; }
-                fallback.setVolume(1.0);
-                fallback.setNumberOfLoops(-1);
-                fallback.play();
-                soundRef.current = fallback;
-              });
-            }
-            return;
-          }
-          s.setVolume(1.0);
-          s.setNumberOfLoops(-1); // loop indefinitely
-          s.play();
-        });
-        soundRef.current = s;
       }
       // Vibrate even when muted — so user still feels the buzz
       Vibration.vibrate([0, 500, 200, 500, 200, 500, 200, 500], true);
@@ -117,22 +134,20 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
   }, [payload.buzz_id, onDismiss]);
 
   // Android: Trigger native alarm immediately when this screen mounts.
-  // The BuzzerService poll may not have detected the buzz yet (up to 10s delay),
-  // so we explicitly call showBuzz to start the alarm right away.
-  // seenBuzzIds dedup in the native service prevents double-processing.
   useEffect(() => {
     if (Platform.OS === 'android') {
-      NativeModules.BuzzerService?.showBuzz?.(
-        payload.buzz_id,
-        payload.from_user_id || '',
-        payload.from_user_name || 'User',
-        payload.reason || '',
-        payload.note || null,
-        payload.sound_id || 'buzz_alarm',
-      ).catch(() => {});
-      // Cancel the native notification after a short delay — this full-screen
-      // UI is already handling the buzz, so the notification in the shade is
-      // redundant and causes "duplicate" perception.
+      if (!isStale) {
+        NativeModules.BuzzerService?.showBuzz?.(
+          payload.buzz_id,
+          payload.from_user_id || '',
+          payload.from_user_name || 'User',
+          payload.reason || '',
+          payload.note || null,
+          payload.sound_id || 'buzz_alarm',
+        ).catch(() => {});
+      } else {
+        Vibration.vibrate([0, 400, 200, 400]);
+      }
       const cancelTimer = setTimeout(() => {
         NativeModules.BuzzerService?.cancelBuzzNotification?.(payload.buzz_id);
         cancelBuzzNotification(payload.buzz_id).catch(() => {});
@@ -174,13 +189,16 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
       <View style={styles.content}>
         <View style={styles.avatarLarge}>
           <Text style={styles.avatarText}>
-            {payload.from_user_name.charAt(0).toUpperCase()}
+            {(payload.from_user_name || 'U').charAt(0).toUpperCase()}
           </Text>
         </View>
 
-        <Text style={styles.fromName}>{payload.from_user_name}</Text>
-        <Text style={styles.reason}>{payload.reason}</Text>
+        <Text style={styles.fromName}>{payload.from_user_name || 'User'}</Text>
+        <Text style={styles.reason}>{payload.reason || ''}</Text>
         {!!payload.note && payload.note !== 'null' && <Text style={styles.note}>{payload.note}</Text>}
+        {isStale && payload.created_at ? (
+          <Text style={styles.staleLabel}>Sent {timeAgo(payload.created_at)}</Text>
+        ) : null}
       </View>
 
       <View style={[styles.buttons, {paddingBottom: insets.bottom + 20}]}>
@@ -260,6 +278,13 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 18,
     textAlign: 'center',
+  },
+  staleLabel: {
+    color: '#FF9800',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 12,
   },
   buttons: {
     paddingHorizontal: 20,

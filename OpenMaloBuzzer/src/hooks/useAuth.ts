@@ -1,5 +1,5 @@
 import {useState, useEffect, useCallback} from 'react';
-import {AppState} from 'react-native';
+import {AppState, Platform, Alert} from 'react-native';
 import {User} from '../types';
 import {
   login as authLogin,
@@ -12,21 +12,43 @@ import {
 } from '../services/auth';
 import {updateLastSeen, updateFcmToken, getFcmToken} from '../services/firebase';
 
-const refreshFcmToken = async (userId: string, showWarning = false) => {
+const refreshFcmToken = async (userId: string) => {
   try {
-    const token = await getFcmToken();
+    const {getMessaging, requestPermission, getToken} = require('@react-native-firebase/messaging');
+    const messaging = getMessaging();
+    const permStatus = await requestPermission(messaging);
+    console.log('[FCM] Permission status:', permStatus);
+    const token = await getToken(messaging);
+    console.log('[FCM] Token:', token ? token.substring(0, 20) + '...' : 'NULL');
     if (token) {
-      await updateFcmToken(userId, token);
-    } else if (showWarning) {
-      const {Alert} = require('react-native');
-      Alert.alert('Push Notifications', 'Could not register for push notifications. You may not receive buzzes when the app is closed.');
+      await updateFcmToken(userId, token, Platform.OS);
+      console.log('[FCM] Token saved to Supabase for user:', userId);
+    } else {
+      console.warn('[FCM] No token returned — APNs registration may have failed');
     }
-  } catch (err) {
-    console.warn('FCM token refresh failed:', err);
-    if (showWarning) {
-      const {Alert} = require('react-native');
-      Alert.alert('Push Notifications', 'Could not register for push notifications. You may not receive buzzes when the app is closed.');
+    // Check iOS notification sound settings
+    if (Platform.OS === 'ios') {
+      try {
+        const notifee = require('@notifee/react-native').default;
+        const settings = await notifee.getNotificationSettings();
+        console.log('[Notif] Settings:', JSON.stringify(settings));
+        // authorizationStatus: 1=AUTHORIZED, 0=DENIED, -1=NOT_DETERMINED
+        // soundSetting: 1=ENABLED, 0=DISABLED
+        if (settings.authorizationStatus === 1 && settings.ios?.sound === 0) {
+          Alert.alert(
+            'Notification Sound Disabled',
+            'Buzzer notification sounds are turned OFF in iOS Settings.\n\nGo to: Settings → Notifications → Buzzer → turn ON "Sounds"',
+          );
+        }
+        if (__DEV__) {
+          Alert.alert('Notification Settings',
+            `Auth: ${settings.authorizationStatus}\nSound: ${settings.ios?.sound ?? 'unknown'}\nAlert: ${settings.ios?.alert ?? 'unknown'}\nBadge: ${settings.ios?.badge ?? 'unknown'}`
+          );
+        }
+      } catch {}
     }
+  } catch (err: any) {
+    console.warn('[FCM] Token refresh failed:', err?.message || err);
   }
 };
 
@@ -48,7 +70,7 @@ export const useAuth = () => {
   // Refresh FCM token on every app open and when app returns to foreground
   useEffect(() => {
     if (!user) return;
-    refreshFcmToken(user.id, true); // warn user on first failure after login
+    refreshFcmToken(user.id);
     const sub = AppState.addEventListener('change', state => {
       if (state === 'active') refreshFcmToken(user.id);
     });
@@ -62,7 +84,7 @@ export const useAuth = () => {
       const {getMessaging, onTokenRefresh} = require('@react-native-firebase/messaging');
       const messaging = getMessaging();
       const unsub = onTokenRefresh(messaging, async (newToken: string) => {
-        if (newToken) await updateFcmToken(user.id, newToken).catch(() => {});
+        if (newToken) await updateFcmToken(user.id, newToken, Platform.OS).catch(() => {});
       });
       return unsub;
     } catch (err: any) {

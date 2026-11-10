@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { fcm_token, data } = await req.json();
+    const { fcm_token, data, platform } = await req.json();
     if (!fcm_token) {
       return new Response(JSON.stringify({ error: "Missing fcm_token" }), {
         status: 400,
@@ -84,6 +84,83 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = await getAccessToken();
+    // If platform is unknown (null/undefined), send a universal message that
+    // works on BOTH platforms: notification field (needed for iOS system
+    // notification) + android high priority + apns with sound/content-available.
+    // This prevents silent failures when the platform column is NULL.
+    const isIOS = platform === "ios";
+    const isUnknown = !platform;
+
+    // Build alert text
+    const alertTitle = data?.type === "buzz"
+      ? `Buzz from ${data?.from_user_name || "User"}`
+      : data?.type === "voice_message"
+      ? `Voice message from ${data?.from_user_name || "User"}`
+      : data?.type === "buzz_cancelled"
+      ? "Buzz cancelled"
+      : undefined;
+    const alertBody = data?.type === "buzz"
+      ? (data?.reason || "Incoming buzz")
+      : data?.type === "voice_message"
+      ? `${data?.duration || "0"}s voice message`
+      : data?.type === "buzz_cancelled"
+      ? `${data?.from_user_name || "User"} cancelled the buzz`
+      : undefined;
+
+    // Build platform-specific FCM message:
+    // iOS: notification message (with `notification` field) so sound plays in killed state
+    // Android: data-only message so background handler fires → BuzzerService alarm
+    const message: Record<string, any> = {
+      token: fcm_token,
+      data: data || {},
+    };
+
+    if (isIOS || isUnknown) {
+      // iOS: notification with sound so the buzzer alarm plays on arrival.
+      message.apns = {
+        headers: {
+          "apns-priority": "10",
+          "apns-push-type": data?.type === "buzz_cancelled" ? "background" : "alert",
+          ...(data?.buzz_id ? { "apns-collapse-id": data.buzz_id } : {}),
+        },
+        payload: {
+          aps: {
+            ...(alertTitle ? { alert: { title: alertTitle, body: alertBody } } : {}),
+            ...(data?.type === "buzz" ? {
+              sound: `${data?.sound_id || "buzz_alarm"}.wav`,
+              "interruption-level": "time-sensitive",
+              "category": "buzz_actions",
+            } : data?.type === "voice_message" ? {
+              sound: "default",
+            } : {}),
+            ...(data?.type === "buzz_cancelled" ? { "content-available": 1 } : {}),
+          },
+        },
+      };
+      if (isUnknown) {
+        message.android = { priority: "high" };
+      }
+    } else {
+      // Data-only message for Android — background handler fires in all states.
+      message.android = { priority: "high" };
+      message.apns = {
+        headers: {
+          "apns-priority": "10",
+          "apns-push-type": "alert",
+          ...(data?.buzz_id ? { "apns-collapse-id": data.buzz_id } : {}),
+        },
+        payload: {
+          aps: {
+            ...(data?.type === "buzz_cancelled" ? { "content-available": 1 } : {}),
+            sound: data?.type === "buzz"
+              ? `${data?.sound_id || "buzz_alarm"}.wav`
+              : data?.type === "voice_message" ? "default" : undefined,
+            alert: { title: alertTitle, body: alertBody },
+            ...(data?.type === "buzz" ? { "interruption-level": "time-sensitive", "category": "buzz_actions" } : {}),
+          },
+        },
+      };
+    }
 
     const fcmRes = await fetch(
       `https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`,
@@ -93,49 +170,7 @@ Deno.serve(async (req) => {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          message: {
-            token: fcm_token,
-            data: data || {},
-            android: { priority: "high" },
-            apns: {
-              headers: {
-                "apns-priority": "10",
-                "apns-push-type": "alert",
-                // collapse-id groups buzz + buzz_cancelled by buzz_id so the
-                // cancellation notification replaces the original on iOS.
-                ...(data?.buzz_id ? { "apns-collapse-id": data.buzz_id } : {}),
-              },
-              payload: {
-                aps: {
-                  "content-available": 1,
-                  // Buzz type: use Critical Alert sound format so iOS bypasses
-                  // Focus/DND and plays at elevated volume. The dict format
-                  // {critical, name, volume} is safe even without the Critical
-                  // Alerts entitlement — iOS falls back to normal sound delivery.
-                  // Non-buzz types: use simple string/default sound.
-                  sound: data?.type === "buzz"
-                    ? { critical: 1, name: `${data?.sound_id || "buzz_alarm"}.wav`, volume: 1.0 }
-                    : data?.type === "voice_message"
-                    ? "default"
-                    : undefined,
-                  alert: data?.type === "buzz"
-                    ? { title: `Buzz from ${data?.from_user_name || "User"}`, body: data?.reason || "Incoming buzz" }
-                    : data?.type === "voice_message"
-                    ? { title: `Voice message from ${data?.from_user_name || "User"}`, body: `${data?.duration || "0"}s voice message` }
-                    : data?.type === "buzz_cancelled"
-                    ? { title: "Buzz cancelled", body: `${data?.from_user_name || "User"} cancelled the buzz` }
-                    : undefined,
-                  "mutable-content": 1,
-                  // Critical interruption level breaks through all Focus modes.
-                  // Requires Critical Alerts entitlement; without it, iOS
-                  // downgrades to "active" (still shows but doesn't bypass DND).
-                  ...(data?.type === "buzz" ? { "interruption-level": "critical", "category": "buzz_actions" } : {}),
-                },
-              },
-            },
-          },
-        }),
+        body: JSON.stringify({ message }),
       }
     );
 

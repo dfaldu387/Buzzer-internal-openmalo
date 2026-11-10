@@ -5,7 +5,7 @@ import {useAuth} from './src/hooks/useAuth';
 import {createNotificationChannel, setupNotificationListeners, cancelBuzzNotification} from './src/services/notification';
 import {respondToBuzz, subscribeToIncomingBuzzes, subscribeToUsers, requestFcmPermission, getUserName} from './src/services/firebase';
 import {MISSED_BUZZ_WINDOW_MS} from './src/constants';
-import {promptBatteryOptimization, promptDndAccess} from './src/services/batteryOptimization';
+import {promptBatteryOptimization, promptDndAccess, recheckBatteryOptimization, checkNotificationPermission} from './src/services/batteryOptimization';
 import {getSelectedSound} from './src/services/soundPreference';
 import {supabase} from './src/services/supabase';
 import {BuzzPayload, User, Group} from './src/types';
@@ -22,7 +22,7 @@ import GroupsScreen from './src/screens/GroupsScreen';
 import GroupBuzzSheet from './src/screens/GroupBuzzSheet';
 import VoiceMailScreen from './src/screens/VoiceMailScreen';
 
-const {BuzzerService} = NativeModules;
+const {BuzzerService, BuzzerAlarmModule} = NativeModules;
 
 /** Safely convert created_at to epoch ms — handles both raw numbers and ISO strings. */
 const toEpochMs = (v: any): number => {
@@ -79,8 +79,11 @@ function App() {
             // Fallback if health check not available
             BuzzerService?.startService(user.id);
           });
-          // Re-check DND access on resume — user may still not have granted it
+          // Re-check permissions on resume — OEM may have revoked battery
+          // exemption, or user may have disabled notifications in Settings
           promptDndAccess();
+          recheckBatteryOptimization();
+          checkNotificationPermission();
           // Force Realtime re-subscribe — WebSocket often silently dies
           // after backgrounding on mobile, causing buzzes to not arrive
           setRealtimeEpoch(e => e + 1);
@@ -122,6 +125,7 @@ function App() {
               reason: buzz.reason,
               note: buzz.note,
               sound_id: buzz.sound_id || null,
+              created_at: toEpochMs(buzz.created_at),
             };
           });
         }
@@ -138,6 +142,7 @@ function App() {
         setIncomingPayload(prev => {
           if (prev?.buzz_id === buzzId) {
             BuzzerService?.stopAlarm?.();
+            BuzzerAlarmModule?.stopAlarm?.();
             return null;
           }
           return prev;
@@ -162,11 +167,13 @@ function App() {
       if (incomingPayload) return;
       try {
         const {data} = await supabase.from('buzzes').select('*')
-          .eq('to_user_id', user.id).eq('response', 'none');
+          .eq('to_user_id', user.id).eq('response', 'none')
+          .order('created_at', {ascending: false}).limit(1);
         if (data && data.length > 0) {
           const buzz = data[0] as any;
+          if (!buzz.id) return; // Guard against malformed rows
           const ts = toEpochMs(buzz.created_at);
-          if (ts > 0 && Date.now() - ts < MISSED_BUZZ_WINDOW_MS) {
+          if (ts > 0 && Date.now() - ts <= MISSED_BUZZ_WINDOW_MS) {
             const name = buzz.from_user_name || usersMapRef.current[buzz.from_user_id] || 'User';
             setIncomingPayload(prev => {
               if (prev?.buzz_id === buzz.id) return prev;
@@ -177,6 +184,7 @@ function App() {
                 reason: buzz.reason,
                 note: buzz.note,
                 sound_id: buzz.sound_id || null,
+                created_at: ts,
               };
             });
           }
@@ -196,7 +204,7 @@ function App() {
         // Don't process buzzes before auth is complete — checkPending
         // will pick them up once the user is loaded.
         if (!userRef.current) return;
-        if (data.type === 'buzz') {
+        if (data.type === 'buzz' && data.buzz_id) {
           console.log(`[T6] FCM onMessage received buzz ${data.buzz_id} at ${Date.now()}`);
           // Show IncomingBuzzScreen immediately from FCM data — don't wait
           // for Supabase Realtime which may have variable latency.
@@ -209,11 +217,10 @@ function App() {
               reason: data.reason || '',
               note: data.note && data.note !== 'null' ? data.note : null,
               sound_id: data.sound_id || null,
+              created_at: Date.now(), // Live push — always fresh
             };
           });
-          // Start native alarm immediately — don't wait for IncomingBuzzScreen
-          // mount which depends on React render cycle. Native seenBuzzIds dedup
-          // prevents double-processing if IncomingBuzzScreen also calls showBuzz.
+          // Start native alarm immediately on Android
           if (Platform.OS === 'android') {
             BuzzerService?.showBuzz?.(
               data.buzz_id,
@@ -225,13 +232,14 @@ function App() {
             ).catch(() => {});
           }
         }
-        if (data.type === 'buzz_cancelled') {
+        if (data.type === 'buzz_cancelled' && data.buzz_id) {
           // Only stop the alarm if the cancelled buzz is the one currently
           // active. Without this check, cancelling an old already-answered
           // buzz would kill a newer buzz's alarm.
           setIncomingPayload(prev => {
             if (prev?.buzz_id === data.buzz_id) {
               BuzzerService?.stopAlarm?.();
+              BuzzerAlarmModule?.stopAlarm?.();
               return null;
             }
             return prev;
@@ -259,6 +267,7 @@ function App() {
               reason: data.reason || '',
               note: data.note && data.note !== 'null' ? data.note : null,
               sound_id: data.sound_id || null,
+              created_at: Date.now(), // Tapped from background — treat as fresh
             };
           });
         }
@@ -272,7 +281,12 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = setupNotificationListeners(
-      (buzzId, response) => { respondToBuzz(buzzId, response as any).catch(() => {}); },
+      (buzzId, response) => {
+        respondToBuzz(buzzId, response as any).catch(() => {});
+        // Stop alarm and dismiss IncomingBuzzScreen when responding from notification
+        BuzzerService?.stopAlarm?.();
+        setIncomingPayload(prev => prev?.buzz_id === buzzId ? null : prev);
+      },
       payload => { setIncomingPayload(prev => prev?.buzz_id === payload.buzz_id ? prev : payload); },
       () => { setSelectedUser(null); setScreen('voice-mail'); },
     );
@@ -395,15 +409,21 @@ function App() {
 
         // Safety net: check Supabase for any missed unanswered buzzes.
         // This catches buzzes sent while the app was inactive and the
-        // FCM token was stale (e.g., iOS app not opened for 2+ days).
+        // FCM token was stale (e.g., iOS app not opened for days).
+        // No time limit — any unanswered buzz is shown. The receiver
+        // sees "Sent X ago" for stale ones and gets a gentle vibrate
+        // instead of a loud alarm. Never silently drop a buzz.
         try {
           const {data: missed} = await supabase.from('buzzes').select('*')
             .eq('to_user_id', userRef.current?.id || '').eq('response', 'none')
-            .order('created_at', {ascending: false}).limit(1);
+            .order('created_at', {ascending: false});
           if (missed && missed.length > 0) {
+            // Show the newest buzz first. Remaining buzzes will be picked
+            // up on subsequent checkPending calls (each app resume) after
+            // the user dismisses the current one.
             const buzz = missed[0] as any;
             const ts = toEpochMs(buzz.created_at);
-            if (ts > 0 && Date.now() - ts < MISSED_BUZZ_WINDOW_MS) {
+            if (buzz.id) {
               const name = buzz.from_user_name || usersMapRef.current[buzz.from_user_id] || 'User';
               setIncomingPayload(prev => {
                 if (prev?.buzz_id === buzz.id) return prev;
@@ -414,6 +434,7 @@ function App() {
                   reason: buzz.reason,
                   note: buzz.note,
                   sound_id: buzz.sound_id || null,
+                  created_at: ts || null,
                 };
               });
               setPendingChecked(true);

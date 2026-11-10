@@ -50,20 +50,31 @@ export const setupNotificationListeners = (
   onOpenVoiceMail?: () => void,
 ) => {
   return notifee.onForegroundEvent(({type, detail}) => {
+    const notif = detail.notification;
+    // For APNs-delivered notifications on iOS, FCM data may be in
+    // different locations. Check multiple paths.
+    const nData = notif?.data || (notif as any)?.remote?.data || (notif as any)?.userInfo || {};
     if (type === EventType.ACTION_PRESS && detail.pressAction) {
-      const buzzId = detail.notification?.data?.buzz_id as string;
+      const buzzId = nData.buzz_id as string;
       const actionId = detail.pressAction.id;
       if (buzzId && ['ack', 'five_min', 'busy'].includes(actionId)) {
         onResponse(buzzId, actionId);
         notifee.cancelNotification(buzzId);
       }
     }
-    if (type === EventType.PRESS && detail.notification?.data) {
-      const data = detail.notification.data;
-      if (data.type === 'voice_message' && onOpenVoiceMail) {
+    if (type === EventType.PRESS && nData) {
+      if (nData.type === 'voice_message' && onOpenVoiceMail) {
         onOpenVoiceMail();
-      } else if (data.buzz_id) {
-        onOpen(data as unknown as BuzzPayload);
+      } else if (nData.buzz_id) {
+        onOpen({
+          buzz_id: nData.buzz_id as string,
+          from_user_id: (nData.from_user_id as string) || '',
+          from_user_name: (nData.from_user_name as string) || 'User',
+          reason: (nData.reason as string) || '',
+          note: nData.note && nData.note !== 'null' ? (nData.note as string) : null,
+          sound_id: (nData.sound_id as string) || null,
+          created_at: Date.now(),
+        });
       }
     }
   });

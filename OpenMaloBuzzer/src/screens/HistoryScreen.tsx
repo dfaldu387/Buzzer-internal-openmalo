@@ -1,7 +1,6 @@
 import React, {useState, useEffect, useCallback, useRef, useMemo} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Alert} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {GestureHandlerRootView, Swipeable} from 'react-native-gesture-handler';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {Buzz, User} from '../types';
 import {getBuzzLogPage, getUsers, deleteBuzzes} from '../services/firebase';
@@ -78,13 +77,17 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
   const groupsMap: Record<string, string> = {};
   groups.forEach(g => { groupsMap[g.id] = g.name; });
 
-  const filterCounts = useMemo(() => ({
-    all: buzzes.length,
-    ack: buzzes.filter(b => b.response === 'ack').length,
-    five_min: buzzes.filter(b => b.response === 'five_min').length,
-    busy: buzzes.filter(b => b.response === 'busy').length,
-    escalated: buzzes.filter(b => b.escalated).length,
-  }), [buzzes]);
+  const filterCounts = useMemo(() => {
+    const incoming = buzzes.filter(b => b.to_user_id === currentUser.id);
+    return {
+      all: buzzes.length,
+      missed: incoming.filter(b => b.response === 'none').length,
+      ack: buzzes.filter(b => b.response === 'ack').length,
+      five_min: buzzes.filter(b => b.response === 'five_min').length,
+      busy: buzzes.filter(b => b.response === 'busy').length,
+      escalated: buzzes.filter(b => b.escalated).length,
+    };
+  }, [buzzes, currentUser.id]);
 
   useEffect(() => {
     const load = async () => {
@@ -140,34 +143,34 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
     return diff < 60 ? `${diff}s` : `${Math.floor(diff / 60)}m ${diff % 60}s`;
   };
 
-  const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
   const [pendingDelete, setPendingDelete] = useState<{buzzIds: string[]; timer: ReturnType<typeof setTimeout>} | null>(null);
 
   const handleDeleteItem = (item: DisplayItem) => {
     const buzzIds = item.type === 'group' ? item.buzzes.map(b => b.id) : [item.buzz.id];
-    swipeableRefs.current[item.id]?.close();
-
-    // Remove from UI immediately (soft delete)
-    setBuzzes(prev => prev.filter(b => !buzzIds.includes(b.id)));
-
-    // Cancel any existing pending delete
-    if (pendingDelete) {
-      clearTimeout(pendingDelete.timer);
-      deleteBuzzes(pendingDelete.buzzIds).catch(() => {});
-    }
-
-    // Schedule permanent delete after 5 seconds
-    const timer = setTimeout(() => {
-      deleteBuzzes(buzzIds).catch(err => console.warn('Delete failed:', err));
-      setPendingDelete(null);
-    }, 5000);
-    setPendingDelete({buzzIds, timer});
+    const label = item.type === 'group' ? 'this group buzz' : 'this buzz';
+    Alert.alert('Delete', `Delete ${label}?`, [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Delete', style: 'destructive', onPress: () => {
+        // Remove from UI immediately
+        setBuzzes(prev => prev.filter(b => !buzzIds.includes(b.id)));
+        // Cancel any existing pending delete
+        if (pendingDelete) {
+          clearTimeout(pendingDelete.timer);
+          deleteBuzzes(pendingDelete.buzzIds).catch(() => {});
+        }
+        // Schedule permanent delete after 5 seconds (undo window)
+        const timer = setTimeout(() => {
+          deleteBuzzes(buzzIds).catch(err => console.warn('Delete failed:', err));
+          setPendingDelete(null);
+        }, 5000);
+        setPendingDelete({buzzIds, timer});
+      }},
+    ]);
   };
 
   const handleUndoDelete = () => {
     if (!pendingDelete) return;
     clearTimeout(pendingDelete.timer);
-    // Re-fetch to restore — simpler and guarantees consistency
     const reload = async () => {
       try {
         const page = await getBuzzLogPage(0, currentUser.id);
@@ -192,29 +195,24 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
     };
   }, []);
 
-  const renderDeleteAction = () => (
-    <TouchableOpacity style={styles.deleteAction} activeOpacity={0.8}>
-      <Icon name="delete" size={24} color="#fff" />
-    </TouchableOpacity>
-  );
+
 
   const renderSingleBuzz = (buzz: Buzz) => {
     const resp = RESPONSE_MAP[buzz.response] || RESPONSE_MAP.none;
-    const fromName = buzz.from_user_id === currentUser.id ? 'You' : (usersMap[buzz.from_user_id] || '?');
-    const toName = buzz.to_user_id === currentUser.id ? 'You' : (usersMap[buzz.to_user_id] || '?');
+    const isOutgoing = buzz.from_user_id === currentUser.id;
+    const displayName = isOutgoing
+      ? (usersMap[buzz.to_user_id] || '?')
+      : (usersMap[buzz.from_user_id] || buzz.from_user_name || '?');
+    const directionLabel = isOutgoing ? 'To' : 'From';
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.avatarRow}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{fromName.charAt(0)}</Text>
-            </View>
-            <Text style={styles.arrow}>→</Text>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{toName.charAt(0)}</Text>
+              <Text style={styles.avatarText}>{displayName.charAt(0)}</Text>
             </View>
             <View style={styles.namesCol}>
-              <Text style={styles.names} numberOfLines={1}>{fromName} → {toName}</Text>
+              <Text style={styles.names} numberOfLines={1}>{directionLabel} {displayName}</Text>
               <Text style={styles.time}>{formatTime(buzz.created_at)}</Text>
             </View>
           </View>
@@ -291,14 +289,13 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
       ? renderGroupBuzz(item.buzzes, item.groupName)
       : renderSingleBuzz(item.buzz);
     return (
-      <Swipeable
-        ref={ref => { swipeableRefs.current[item.id] = ref; }}
-        renderRightActions={renderDeleteAction}
-        onSwipeableOpen={() => handleDeleteItem(item)}
-        overshootRight={false}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onLongPress={() => handleDeleteItem(item)}
+        delayLongPress={600}
       >
         {content}
-      </Swipeable>
+      </TouchableOpacity>
     );
   };
 
@@ -312,12 +309,12 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
   };
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <View style={styles.container}>
       <View style={[styles.header, {paddingTop: insets.top + 12}]}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Text style={styles.backBtn}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Buzzes</Text>
+        <Text style={styles.headerTitle}>Buzz Log</Text>
         <View style={styles.periodBadge}>
           <Text style={styles.periodText}>7 days</Text>
         </View>
@@ -325,6 +322,9 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
       <View style={styles.filterBar}>
         <TouchableOpacity style={[styles.filterChip, filter === 'all' && styles.filterChipActive]} onPress={() => setFilter('all')}>
           <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>All ({filterCounts.all})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.filterChip, filter === 'missed' && {backgroundColor: '#FF444430', borderColor: '#FF4444'}]} onPress={() => setFilter('missed')}>
+          <Text style={[styles.filterChipText, filter === 'missed' && {color: '#FF4444'}]}>Missed ({filterCounts.missed})</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, filter === 'ack' && {backgroundColor: '#4CAF5030', borderColor: '#4CAF50'}]} onPress={() => setFilter('ack')}>
           <Text style={[styles.filterChipText, filter === 'ack' && {color: '#4CAF50'}]}>Ack ({filterCounts.ack})</Text>
@@ -350,7 +350,7 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
         </View>
       ) : (
         <FlatList
-          data={groupBuzzes(filter === 'all' ? buzzes : filter === 'escalated' ? buzzes.filter(b => b.escalated) : buzzes.filter(b => b.response === filter), groupsMap)}
+          data={groupBuzzes(filter === 'all' ? buzzes : filter === 'missed' ? buzzes.filter(b => b.to_user_id === currentUser.id && b.response === 'none') : filter === 'escalated' ? buzzes.filter(b => b.escalated) : buzzes.filter(b => b.response === filter), groupsMap)}
           renderItem={renderItem}
           keyExtractor={item => item.id}
           contentContainerStyle={[styles.list, {paddingBottom: insets.bottom + 24}]}
@@ -368,7 +368,7 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
           </TouchableOpacity>
         </View>
       )}
-    </GestureHandlerRootView>
+    </View>
   );
 };
 

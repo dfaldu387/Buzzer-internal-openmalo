@@ -57,6 +57,7 @@ class TokenRefreshWorker(
                         put("user_id", userId)
                         put("fcm_token", token)
                         put("fcm_token_stale", false)
+                        put("token_updated_at", System.currentTimeMillis())
                     }
 
                     val writer = OutputStreamWriter(conn.outputStream)

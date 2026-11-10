@@ -43,6 +43,7 @@ class BuzzerService : Service() {
         const val ACTION_STOP_ALARM = "com.openmalobuzzer.STOP_ALARM"
         const val ACTION_RESPOND = "com.openmalobuzzer.RESPOND"
         const val ACTION_SHOW_BUZZ = "com.openmalobuzzer.SHOW_BUZZ"
+        const val ACTION_START_ALARM = "com.openmalobuzzer.START_ALARM"
         const val EXTRA_USER_ID = "user_id"
         const val EXTRA_BUZZ_ID = "buzz_id"
         const val EXTRA_RESPONSE = "response"
@@ -147,10 +148,24 @@ class BuzzerService : Service() {
     private var restartAttempt = 0
     private val userNameCache = mutableMapOf<String, String>()
 
+    // After a service restart (OEM kill, timeout, reboot), the first poll
+    // uses a wider age window (30 min) to catch buzzes that arrived while
+    // the service was dead. Subsequent polls use the default 2-min window.
+    @Volatile private var firstPollAfterRestart = true
+
     private var watchdogCounter = 0
     private val pollRunnable = object : Runnable {
         override fun run() {
-            currentUserId?.let { pollForBuzzes(it) }
+            currentUserId?.let { userId ->
+                if (firstPollAfterRestart) {
+                    firstPollAfterRestart = false
+                    // Use 30-minute window on first poll to catch buzzes
+                    // sent while the service was dead (OEM kill, reboot, etc.)
+                    pollForBuzzes(userId, 1800000L) // 30 minutes
+                } else {
+                    pollForBuzzes(userId)
+                }
+            }
             // Write heartbeat so the app can detect if the service was killed by OEM
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putLong(PREF_LAST_HEARTBEAT, System.currentTimeMillis()).apply()
@@ -211,6 +226,16 @@ class BuzzerService : Service() {
             cancelActiveBuzzNotification()
             activeBuzzId = null
             clearActiveBuzz()
+            return START_STICKY
+        }
+
+        // Triggered by IncomingBuzzScreen when user taps the notification.
+        // Sound plays only at this moment — not on notification arrival.
+        if (action == ACTION_START_ALARM) {
+            if (activeBuzzId != null) {
+                Log.d(TAG, "ACTION_START_ALARM: starting alarm for buzz $activeBuzzId")
+                startAlarm()
+            }
             return START_STICKY
         }
 
@@ -386,8 +411,7 @@ class BuzzerService : Service() {
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to verify recovered buzz: ${e.message}")
-                        // On network failure, replay anyway — better to alarm
-                        // for an answered buzz than to miss an unanswered one.
+                        // On network failure, replay anyway
                         handler.post {
                             seenBuzzIds.remove(savedBuzzId)
                             activeBuzzId = savedBuzzId
@@ -637,6 +661,7 @@ class BuzzerService : Service() {
 
     // ─── Polling management ────────────────────────────────
     private fun startPolling() {
+        firstPollAfterRestart = true // Widen age filter on first poll
         handler.removeCallbacks(pollRunnable)
         handler.post(pollRunnable)
         handler.removeCallbacks(fcmTokenRefreshRunnable)

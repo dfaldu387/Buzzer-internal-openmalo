@@ -89,6 +89,15 @@ class BuzzerServiceModule(reactContext: ReactApplicationContext) :
         reactApplicationContext.startService(intent)
     }
 
+    /** Start the alarm — called by IncomingBuzzScreen when user taps notification. */
+    @ReactMethod
+    fun startAlarm() {
+        val intent = Intent(reactApplicationContext, BuzzerService::class.java).apply {
+            action = BuzzerService.ACTION_START_ALARM
+        }
+        reactApplicationContext.startService(intent)
+    }
+
     @ReactMethod
     fun getPendingBuzz(promise: Promise) {
         val payload = MainActivity.pendingBuzzPayload

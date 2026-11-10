@@ -1,6 +1,20 @@
 import {SUPABASE_URL, SUPABASE_ANON_KEY} from '@env';
 import {supabase} from './supabase';
 
+// Push delivery result — lets the sender UI show appropriate warnings.
+export type PushResult = 'delivered' | 'no_token' | 'token_invalid' | 'failed';
+
+/** Check if a token's UNREGISTERED/INVALID error code is present in the FCM response. */
+const isTokenInvalid = (body: any): boolean => {
+  const code = body?.error?.code;
+  const fcmV1Code = body?.error?.details?.find?.(
+    (d: any) => d?.['@type'] === 'type.googleapis.com/google.firebase.fcm.v1.FcmError'
+  )?.errorCode;
+  return code === 'messaging/registration-token-not-registered' ||
+    code === 'messaging/invalid-registration-token' ||
+    fcmV1Code === 'UNREGISTERED' || fcmV1Code === 'INVALID_ARGUMENT';
+};
+
 export const sendBuzzPush = async (
   toUserId: string,
   buzzId: string,
@@ -9,16 +23,12 @@ export const sendBuzzPush = async (
   reason: string,
   note: string | null,
   soundId: string = 'buzz_alarm',
-) => {
+): Promise<PushResult> => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token,fcm_token_stale').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,platform').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken) return;
-    // Skip sending to known-stale tokens — the buzz is already in the
-    // buzzes table so the receiver's polling fallback will pick it up
-    // when they next open the app.
-    if (tokenData.fcm_token_stale) return;
+    if (!fcmToken) return 'no_token';
 
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -28,6 +38,7 @@ export const sendBuzzPush = async (
       },
       body: JSON.stringify({
         fcm_token: fcmToken,
+        platform: tokenData?.platform || null,
         data: {
           type: 'buzz',
           buzz_id: buzzId,
@@ -39,26 +50,21 @@ export const sendBuzzPush = async (
         },
       }),
     });
-    // If the Edge Function reports the token is invalid, mark it stale
-    // so the sender-side UI can show a warning in the future.
-    // Check regardless of HTTP status — edge function returns structured
-    // error for stale tokens, but also handle raw FCM v1 errors as fallback.
+
     try {
       const body = await res.json();
-      const code = body?.error?.code;
-      const fcmV1Code = body?.error?.details?.find?.(
-        (d: any) => d?.['@type'] === 'type.googleapis.com/google.firebase.fcm.v1.FcmError'
-      )?.errorCode;
-      if (code === 'messaging/registration-token-not-registered' ||
-          code === 'messaging/invalid-registration-token' ||
-          fcmV1Code === 'UNREGISTERED' || fcmV1Code === 'INVALID_ARGUMENT') {
+      if (isTokenInvalid(body)) {
         await supabase.from('user_tokens')
           .update({fcm_token_stale: true})
           .eq('user_id', toUserId);
+        return 'token_invalid';
       }
     } catch {}
+
+    return res.ok ? 'delivered' : 'failed';
   } catch (e: any) {
     console.warn('sendBuzzPush failed:', e?.message || e);
+    return 'failed';
   }
 };
 
@@ -69,9 +75,9 @@ export const sendBuzzCancelledPush = async (
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token,fcm_token_stale').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,platform').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken || tokenData.fcm_token_stale) return;
+    if (!fcmToken) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -81,6 +87,7 @@ export const sendBuzzCancelledPush = async (
       },
       body: JSON.stringify({
         fcm_token: fcmToken,
+        platform: tokenData?.platform || null,
         data: {
           type: 'buzz_cancelled',
           buzz_id: buzzId,
@@ -100,9 +107,9 @@ export const sendVoiceMailPush = async (
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token,fcm_token_stale').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,platform').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken || tokenData.fcm_token_stale) return;
+    if (!fcmToken) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -112,6 +119,7 @@ export const sendVoiceMailPush = async (
       },
       body: JSON.stringify({
         fcm_token: fcmToken,
+        platform: tokenData?.platform || null,
         data: {
           type: 'voice_message',
           from_user_name: fromUserName,
@@ -135,9 +143,9 @@ export const sendEscalationPush = async (
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token,fcm_token_stale').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,platform').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken || tokenData.fcm_token_stale) return;
+    if (!fcmToken) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -147,6 +155,7 @@ export const sendEscalationPush = async (
       },
       body: JSON.stringify({
         fcm_token: fcmToken,
+        platform: tokenData?.platform || null,
         data: {
           type: 'buzz',
           buzz_id: buzzId,
