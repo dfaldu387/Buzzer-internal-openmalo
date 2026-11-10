@@ -57,6 +57,9 @@ const RESPONSE_CONFIG: Record<BuzzResponse, {label: string; color: string; icon:
 };
 
 const ADD_BUZZ_DELAY_MS = 10000;
+// Re-send push every 10s — iOS cuts notification sound at ~10-12s.
+// Each re-push restarts the sound → continuous ringing until response.
+const REPUSH_INTERVAL_MS = 10000;
 
 const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, autoSend, initialSound}) => {
   const insets = useSafeAreaInsets();
@@ -161,6 +164,24 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
     }, 3000);
     return () => clearInterval(poll);
   }, [buzzState]);
+
+  // Re-push: re-send push every 10s for unanswered buzzes so iOS
+  // notification sound keeps playing (iOS cuts sound at ~10-12s).
+  useEffect(() => {
+    if (buzzState !== 'sent') return;
+    const repush = setInterval(() => {
+      const waiting = activeBuzzesRef.current.filter(b => b.response === 'none');
+      if (waiting.length === 0) return;
+      waiting.forEach(b => {
+        sendBuzzPush(
+          b.receiver.id, b.id, sender.id, sender.name,
+          sentReasonRef.current, sentNoteRef.current,
+          sentSoundRef.current,
+        ).catch(() => {});
+      });
+    }, REPUSH_INTERVAL_MS);
+    return () => clearInterval(repush);
+  }, [buzzState, sender.id, sender.name]);
 
   // Per-buzz escalation
   useEffect(() => {
