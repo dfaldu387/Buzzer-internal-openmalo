@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>SUPABASE_URL</key>
+	<string>https://tlxllykthqtmsoxkmulb.supabase.co</string>
+	<key>SUPABASE_ANON_KEY</key>
+	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRseGxseWt0aHF0bXNveGttdWxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NjM4NzQsImV4cCI6MjEwODIzOTg3NH0.Oxd87GbchiUEk3sdJczMhBVdX47HaycRVz3TK2UT7q0</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

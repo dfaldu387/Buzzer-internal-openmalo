@@ -58,14 +58,19 @@ class TokenRefreshWorker(
                         put("fcm_token", token)
                         put("fcm_token_stale", false)
                         put("token_updated_at", System.currentTimeMillis())
+                        put("platform", "android")
                     }
 
                     val writer = OutputStreamWriter(conn.outputStream)
                     writer.write(body.toString())
                     writer.flush()
                     writer.close()
-                    conn.responseCode
-                    Log.d(TAG, "FCM token refreshed and saved to Supabase")
+                    val responseCode = conn.responseCode
+                    if (responseCode in 200..299) {
+                        Log.d(TAG, "FCM token refreshed and saved to Supabase")
+                    } else {
+                        Log.e(TAG, "Supabase token upsert failed with HTTP $responseCode")
+                    }
                 } finally {
                     conn?.disconnect()
                 }

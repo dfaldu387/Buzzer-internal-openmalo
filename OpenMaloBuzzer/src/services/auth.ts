@@ -1,8 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Platform} from 'react-native';
 import {User} from '../types';
-import {getUserByPhone, addUser, removeUser, removeInactiveByPhone, updateFcmToken, updateUserProfile, resetUserPin} from './firebase';
+import {getUserByPhone, addUser, removeUser, removeInactiveByPhone, updateFcmToken, updateUserProfile, resetUserPin, updateOwnPin} from './firebase';
 import {hashPin, verifyPin} from './crypto';
+import {clearUserCache} from '../hooks/useUsers';
+import {clearReasonCache} from '../hooks/useReasons';
+import {clearGroupCache} from '../hooks/useGroups';
 
 const AUTH_KEY = '@openmalo_user';
 
@@ -18,8 +21,12 @@ export const login = async (phone: string, pin: string): Promise<User | null> =>
 
   // Migrate legacy DJB2 hash to SHA-256
   if (!user.pin_hash.startsWith('v2:')) {
-    const newHash = hashPin(pin);
-    await resetUserPin(user.id, newHash);
+    try {
+      await updateOwnPin(user.id, pin, pin);
+    } catch {
+      // Fallback if Edge Function not deployed yet
+      try { await resetUserPin(user.id, hashPin(pin)); } catch {}
+    }
   }
 
   await storeUser(user);
@@ -52,6 +59,10 @@ export const signup = async (
   // Remove any inactive user with same phone (soft-deleted accounts)
   await removeInactiveByPhone(phone);
 
+  // Signup inserts via anon key — the DB trigger allows INSERT and member role.
+  // NOTE: Only 'member' role works here. Admin user creation goes through
+  // the admin-action Edge Function (adminAddUser).
+  const {hashPin} = require('./crypto');
   const userData: Omit<User, 'id'> = {
     name: name.trim(),
     phone,
@@ -107,6 +118,10 @@ export const logout = async () => {
     }
   } catch {}
   await AsyncStorage.removeItem(AUTH_KEY);
+  // Clear module-level caches to prevent data leaking between user sessions
+  clearUserCache();
+  clearReasonCache();
+  clearGroupCache();
 };
 
 export const updateProfile = async (
@@ -128,21 +143,17 @@ export const changePin = async (
   currentPin: string,
   newPin: string,
 ): Promise<void> => {
+  // Try Edge Function first (server-side verification). Fall back to direct
+  // Supabase if the Edge Function isn't deployed yet.
+  try {
+    await updateOwnPin(user.id, currentPin, newPin);
+    return;
+  } catch (e: any) {
+    if (!e?.message?.includes('404')) throw e;
+  }
+  // Fallback: verify locally, update directly
   const freshUser = await getUserByPhone(user.phone);
   if (!freshUser) throw new Error('User not found');
-  if (!verifyPin(currentPin, freshUser.pin_hash)) {
-    throw new Error('Current PIN is incorrect');
-  }
-  const newHash = hashPin(newPin);
-  await resetUserPin(user.id, newHash);
-};
-
-export const resetForgottenPin = async (
-  phone: string,
-  newPin: string,
-): Promise<void> => {
-  const user = await getUserByPhone(phone);
-  if (!user) throw new Error('No account found with this phone number');
-  const newHash = hashPin(newPin);
-  await resetUserPin(user.id, newHash);
+  if (!verifyPin(currentPin, freshUser.pin_hash)) throw new Error('Current PIN is incorrect');
+  await resetUserPin(user.id, hashPin(newPin));
 };

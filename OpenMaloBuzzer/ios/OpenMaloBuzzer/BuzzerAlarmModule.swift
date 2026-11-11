@@ -216,6 +216,13 @@ class BuzzerAlarmModule: NSObject, AVAudioPlayerDelegate {
     }
   }
 
+  /// Store userId in UserDefaults so the native BGTaskScheduler can write
+  /// refreshed FCM tokens to Supabase without a JS context.
+  @objc
+  func setUserId(_ userId: String) {
+    UserDefaults.standard.set(userId, forKey: "buzzer_active_user_id")
+  }
+
   @objc
   static func requiresMainQueueSetup() -> Bool { return false }
 }

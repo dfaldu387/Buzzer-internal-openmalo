@@ -34,11 +34,14 @@ const fetchMock = jest.fn(() => Promise.resolve({ok: true, json: () => Promise.r
 import {sendBuzzPush, sendBuzzCancelledPush, sendVoiceMailPush, sendEscalationPush} from '../src/services/pushNotification';
 const {_state, supabase: mockSupabase} = require('../src/services/supabase');
 
-function withToken(token: string | null) {
+function withToken(token: string | null, stale = false) {
   _state.fromImpl = (table: string) => {
     if (table === 'user_tokens') {
       const c = _state._defaultChainable();
-      c.maybeSingle = jest.fn(() => Promise.resolve({data: token ? {fcm_token: token} : null, error: null}));
+      c.maybeSingle = jest.fn(() => Promise.resolve({
+        data: token ? {fcm_token: token, fcm_token_stale: stale} : null,
+        error: null,
+      }));
       return c;
     }
     return _state._defaultChainable();
@@ -73,14 +76,22 @@ describe('sendBuzzPush', () => {
 
   it('skips push when no FCM token', async () => {
     withToken(null);
-    await sendBuzzPush('r-1', 'b-1', 's-1', 'A', 'Test', null);
+    const result = await sendBuzzPush('r-1', 'b-1', 's-1', 'A', 'Test', null);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toBe('no_token');
   });
 
-  it('does not throw on network failure', async () => {
+  it('returns token_invalid when fcm_token_stale is true', async () => {
+    withToken('tok-stale', true);
+    const result = await sendBuzzPush('r-1', 'b-1', 's-1', 'A', 'Test', null);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toBe('token_invalid');
+  });
+
+  it('returns failed on network failure', async () => {
     withToken('tok-123');
     fetchMock.mockRejectedValueOnce(new Error('Network error'));
-    await expect(sendBuzzPush('r-1', 'b-1', 's-1', 'A', 'Test', null)).resolves.toBeUndefined();
+    await expect(sendBuzzPush('r-1', 'b-1', 's-1', 'A', 'Test', null)).resolves.toBe('failed');
   });
 });
 
@@ -93,6 +104,12 @@ describe('sendBuzzCancelledPush', () => {
     expect(body.data.buzz_id).toBe('b-1');
     expect(body.data.from_user_name).toBe('Alice');
   });
+
+  it('skips push when token is stale', async () => {
+    withToken('tok-456', true);
+    await sendBuzzCancelledPush('r-1', 'b-1', 'Alice');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('sendVoiceMailPush', () => {
@@ -104,6 +121,12 @@ describe('sendVoiceMailPush', () => {
     expect(body.data.duration).toBe('15');
     expect(body.data.from_user_name).toBe('Bob');
   });
+
+  it('skips push when token is stale', async () => {
+    withToken('tok-789', true);
+    await sendVoiceMailPush('r-1', 'Bob', 15);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('sendEscalationPush', () => {
@@ -113,5 +136,11 @@ describe('sendEscalationPush', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.data.type).toBe('buzz');
     expect(body.data.reason).toBe('RE-BUZZ: Call me');
+  });
+
+  it('skips push when token is stale', async () => {
+    withToken('tok-esc', true);
+    await sendEscalationPush('r-1', 'b-1', 's-1', 'Alice', 'Call me', 'Room 4');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

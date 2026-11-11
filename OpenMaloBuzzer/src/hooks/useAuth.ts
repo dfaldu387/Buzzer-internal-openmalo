@@ -10,7 +10,7 @@ import {
   getStoredUser,
   logout as authLogout,
 } from '../services/auth';
-import {updateLastSeen, updateFcmToken, getFcmToken} from '../services/firebase';
+import {updateLastSeen, updateFcmToken, getFcmToken, flushPendingResponses} from '../services/firebase';
 
 const refreshFcmToken = async (userId: string) => {
   try {
@@ -22,6 +22,14 @@ const refreshFcmToken = async (userId: string) => {
     console.log('[FCM] Token:', token ? token.substring(0, 20) + '...' : 'NULL');
     if (token) {
       await updateFcmToken(userId, token, Platform.OS);
+      // Persist userId to native UserDefaults so iOS BGTaskScheduler
+      // can write refreshed tokens to Supabase without JS context.
+      if (Platform.OS === 'ios') {
+        try {
+          const {NativeModules} = require('react-native');
+          NativeModules.BuzzerAlarmModule?.setUserId?.(userId);
+        } catch {}
+      }
       console.log('[FCM] Token saved to Supabase for user:', userId);
     } else {
       console.warn('[FCM] No token returned — APNs registration may have failed');
@@ -66,8 +74,12 @@ export const useAuth = () => {
   useEffect(() => {
     if (!user) return;
     refreshFcmToken(user.id);
+    flushPendingResponses();
     const sub = AppState.addEventListener('change', state => {
-      if (state === 'active') refreshFcmToken(user.id);
+      if (state === 'active') {
+        refreshFcmToken(user.id);
+        flushPendingResponses();
+      }
     });
     return () => sub.remove();
   }, [user]);

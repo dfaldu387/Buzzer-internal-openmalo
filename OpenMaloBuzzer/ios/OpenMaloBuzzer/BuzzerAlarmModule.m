@@ -6,5 +6,6 @@ RCT_EXTERN_METHOD(activateAlarmSession:(RCTPromiseResolveBlock)resolve reject:(R
 RCT_EXTERN_METHOD(deactivateAlarmSession:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(startAlarm:(NSString *)soundFile resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(stopAlarm)
+RCT_EXTERN_METHOD(setUserId:(NSString *)userId)
 
 @end

@@ -114,11 +114,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       UIApplication.shared.registerForRemoteNotifications()
     }
 
-    // Refresh the FCM token mapping
+    // Refresh the FCM token mapping AND save to Supabase
     Messaging.messaging().token { token, error in
       if let token = token {
         print("[BGTask] FCM token refreshed: \(token.prefix(12))...")
-        task.setTaskCompleted(success: true)
+        // Write refreshed token to Supabase so push delivery uses the new token.
+        // Without this, the server holds a stale token after rotation.
+        saveTokenToSupabase(token: token) { success in
+          task.setTaskCompleted(success: success)
+        }
       } else {
         print("[BGTask] FCM token refresh failed: \(error?.localizedDescription ?? "unknown")")
         task.setTaskCompleted(success: false)
@@ -129,6 +133,69 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     task.expirationHandler = {
       task.setTaskCompleted(success: false)
     }
+  }
+
+  /// Write the FCM token to Supabase user_tokens table via REST API.
+  /// This mirrors what Android's TokenRefreshWorker does in Kotlin.
+  private static func saveTokenToSupabase(token: String, completion: @escaping (Bool) -> Void) {
+    guard let userId = UserDefaults.standard.string(forKey: "buzzer_active_user_id") else {
+      print("[BGTask] No userId in UserDefaults — skipping Supabase write")
+      completion(true) // Not a failure — user hasn't logged in yet
+      return
+    }
+
+    // Read Supabase credentials from Info.plist
+    guard let supabaseUrl = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
+          let supabaseKey = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String else {
+      print("[BGTask] Missing SUPABASE_URL or SUPABASE_ANON_KEY in Info.plist")
+      completion(false)
+      return
+    }
+
+    guard let url = URL(string: "\(supabaseUrl)/rest/v1/user_tokens") else {
+      completion(false)
+      return
+    }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+    request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
+    request.timeoutInterval = 10
+
+    let body: [String: Any] = [
+      "user_id": userId,
+      "fcm_token": token,
+      "fcm_token_stale": false,
+      "token_updated_at": Int64(Date().timeIntervalSince1970 * 1000),
+      "platform": "ios",
+    ]
+
+    do {
+      request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    } catch {
+      print("[BGTask] JSON serialization failed: \(error)")
+      completion(false)
+      return
+    }
+
+    URLSession.shared.dataTask(with: request) { _, response, error in
+      if let error = error {
+        print("[BGTask] Supabase write failed: \(error.localizedDescription)")
+        completion(false)
+        return
+      }
+      let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+      if status >= 200 && status < 300 {
+        print("[BGTask] Token saved to Supabase for user \(userId.prefix(8))...")
+        completion(true)
+      } else {
+        print("[BGTask] Supabase write returned HTTP \(status)")
+        completion(false)
+      }
+    }.resume()
   }
 
   // MARK: UISceneSession Lifecycle

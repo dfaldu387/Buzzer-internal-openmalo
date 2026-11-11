@@ -1,10 +1,9 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import {View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Modal} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {User, Reason} from '../types';
-import {subscribeToUsers, subscribeToReasons, addUser, removeUser, resetUserPin, updateUserRole, addReason, removeReason} from '../services/firebase';
-import {hashPin} from '../services/crypto';
+import {subscribeToUsers, subscribeToReasons, adminAddUser, adminRemoveUser, adminResetPin, adminUpdateRole, addReason, removeReason} from '../services/firebase';
 import {MAX_REASONS} from '../constants';
 
 interface Props {
@@ -53,6 +52,44 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
     setModal({visible: true, title, message, confirmText, onConfirm, destructive});
   };
 
+  // ─── Admin PIN prompt ────────────────────────────────────
+  const [adminPin, setAdminPin] = useState<string | null>(null);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const pendingActionRef = useRef<((pin: string) => Promise<void>) | null>(null);
+
+  const requireAdminPin = (action: (pin: string) => Promise<void>) => {
+    if (adminPin) {
+      action(adminPin).catch((err: any) => {
+        if (err?.message?.includes('Invalid PIN') || err?.message?.includes('401')) {
+          setAdminPin(null);
+          showAlert('Session Expired', 'Please re-enter your PIN.');
+        } else {
+          showAlert('Error', err?.message || 'Action failed');
+        }
+      });
+    } else {
+      pendingActionRef.current = action;
+      setPinInput('');
+      setPinModalVisible(true);
+    }
+  };
+
+  const handlePinSubmit = () => {
+    if (pinInput.length !== 4) return;
+    setPinModalVisible(false);
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    if (!action) return;
+    action(pinInput).then(() => {
+      setAdminPin(pinInput);
+    }).catch((err: any) => {
+      showAlert('Error', err?.message || 'Action failed');
+    });
+  };
+
+  // ─── Admin action handlers ──────────────────────────────
+
   const handleAddUser = async () => {
     if (!isAdmin) return;
     if (!newName.trim() || !newPhone.trim()) {
@@ -60,14 +97,19 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
       return;
     }
     const pin = generateRandomPin();
-    await addUser({name: newName.trim(), phone: newPhone.trim(), pin_hash: hashPin(pin), role: newRole, last_seen_at: 0, is_active: true});
-    showAlert('User Added', `${newName} added with PIN: ${pin}\n\nShare this PIN with the user. They should change it after first login.`);
-    setNewName(''); setNewPhone(''); setShowAddUser(false);
+    const name = newName.trim();
+    requireAdminPin(async (aPin) => {
+      await adminAddUser(currentUser.id, aPin, name, newPhone.trim(), pin, newRole);
+      showAlert('User Added', `${name} added with PIN: ${pin}\n\nShare this PIN with the user. They should change it after first login.`);
+      setNewName(''); setNewPhone(''); setShowAddUser(false);
+    });
   };
 
   const handleRemoveUser = (user: User) => {
     if (!isAdmin) return;
-    showConfirm('Remove User', `Remove ${user.name}?`, 'Remove', () => removeUser(user.id), true);
+    showConfirm('Remove User', `Remove ${user.name}?`, 'Remove', () => {
+      requireAdminPin(pin => adminRemoveUser(currentUser.id, pin, user.id));
+    }, true);
   };
 
   const handleResetPin = (user: User) => {
@@ -76,9 +118,11 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
       'Reset PIN',
       `Reset ${user.name}'s PIN to a new random PIN?`,
       'Reset',
-      async () => {
-        await resetUserPin(user.id, hashPin(pin));
-        showAlert('PIN Reset', `${user.name}'s new PIN: ${pin}\n\nShare this PIN with the user.`);
+      () => {
+        requireAdminPin(async (aPin) => {
+          await adminResetPin(currentUser.id, aPin, user.id, pin);
+          showAlert('PIN Reset', `${user.name}'s new PIN: ${pin}\n\nShare this PIN with the user.`);
+        });
       },
     );
   };
@@ -89,7 +133,9 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
       'Change Role',
       `Change ${user.name}'s role to ${targetRole}?`,
       'Change',
-      () => updateUserRole(user.id, targetRole),
+      () => {
+        requireAdminPin(pin => adminUpdateRole(currentUser.id, pin, user.id, targetRole));
+      },
     );
   };
 
@@ -176,6 +222,46 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
         </View>
       </ScrollView>
 
+      {/* Admin PIN Prompt */}
+      <Modal
+        visible={pinModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPinModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalIconWrap}>
+              <Icon name="lock" size={32} color="#FF4D4D" />
+            </View>
+            <Text style={styles.modalTitle}>Enter Your PIN</Text>
+            <Text style={styles.modalMessage}>Verify your identity to continue.</Text>
+            <TextInput
+              style={styles.adminPinInput}
+              value={pinInput}
+              onChangeText={t => setPinInput(t.replace(/[^0-9]/g, ''))}
+              keyboardType="number-pad"
+              maxLength={4}
+              secureTextEntry
+              autoFocus
+              placeholder="4-digit PIN"
+              placeholderTextColor="#666"
+              onSubmitEditing={handlePinSubmit}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setPinModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, pinInput.length !== 4 && {opacity: 0.5}]}
+                disabled={pinInput.length !== 4}
+                onPress={handlePinSubmit}>
+                <Text style={styles.modalConfirmText}>Verify</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={modal.visible}
         transparent
@@ -250,6 +336,7 @@ const styles = StyleSheet.create({
   addReasonRow: {flexDirection: 'row', gap: 8, marginBottom: 12},
   addReasonBtn: {backgroundColor: '#FF4D4D', width: 48, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},
   addReasonBtnText: {color: '#fff', fontSize: 24, fontWeight: '700'},
+  adminPinInput: {backgroundColor: '#252525', color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center', paddingVertical: 14, borderRadius: 10, borderWidth: 1, borderColor: '#333', marginBottom: 20, width: '100%', letterSpacing: 8},
   modalOverlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32},
   modalBox: {backgroundColor: '#1A1A1A', borderRadius: 20, padding: 28, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#333'},
   modalIconWrap: {width: 64, height: 64, borderRadius: 32, backgroundColor: '#2a1515', alignItems: 'center', justifyContent: 'center', marginBottom: 16},

@@ -255,7 +255,8 @@ describe('updateFcmToken', () => {
     };
     const {updateFcmToken} = require('../src/services/firebase');
     await updateFcmToken('u1', 'new-token');
-    expect(upsertData).toEqual({user_id: 'u1', fcm_token: 'new-token', fcm_token_stale: false});
+    expect(upsertData).toEqual(expect.objectContaining({user_id: 'u1', fcm_token: 'new-token', fcm_token_stale: false}));
+    expect(typeof upsertData.token_updated_at).toBe('number');
   });
 });
 

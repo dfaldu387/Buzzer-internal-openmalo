@@ -6,6 +6,9 @@ import {PRESENCE_TIMEOUT_MS} from '../constants';
 // Module-level cache so re-mounting HomeScreen doesn't flash a loading spinner
 let cachedUsers: User[] | null = null;
 
+/** Clear the module-level cache. Must be called on logout to prevent data leaking between sessions. */
+export const clearUserCache = () => { cachedUsers = null; };
+
 export const useUsers = (currentUserId: string | undefined) => {
   const [users, setUsers] = useState<User[]>(
     cachedUsers

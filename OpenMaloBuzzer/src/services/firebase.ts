@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {SUPABASE_URL, SUPABASE_ANON_KEY} from '@env';
 import {supabase} from './supabase';
 import {User, Buzz, Reason, BuzzResponse, Group, CallLog, VoiceMail} from '../types';
 
@@ -33,13 +35,14 @@ export const getUserByPhone = async (phone: string): Promise<User | null> => {
 };
 
 export const updateFcmToken = async (userId: string, token: string, platform?: string) => {
-  await supabase.from('user_tokens').upsert({
+  const {error} = await supabase.from('user_tokens').upsert({
     user_id: userId,
     fcm_token: token,
     fcm_token_stale: false,
     token_updated_at: Date.now(),
     ...(platform ? {platform} : {}),
   });
+  if (error) console.warn('updateFcmToken failed:', error.message);
 };
 
 export const updateLastSeen = async (userId: string) => {
@@ -111,9 +114,46 @@ export const createBuzz = async (buzz: Omit<Buzz, 'id'>) => {
   return {id: data.id};
 };
 
-export const respondToBuzz = async (buzzId: string, response: BuzzResponse) => {
-  const {error} = await supabase.from('buzzes').update({response, responded_at: Date.now()}).eq('id', buzzId);
-  if (error) console.warn('respondToBuzz failed:', buzzId, error.message);
+const PENDING_RESPONSES_KEY = '@openmalo_pending_responses';
+
+export const respondToBuzz = async (buzzId: string, response: BuzzResponse): Promise<boolean> => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const {error} = await supabase.from('buzzes').update({response, responded_at: Date.now()}).eq('id', buzzId);
+    if (!error) return true;
+    console.warn(`respondToBuzz attempt ${attempt + 1} failed:`, buzzId, error.message);
+    if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  // All retries failed — persist for later so the response isn't lost
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_RESPONSES_KEY);
+    const pending: {buzzId: string; response: string; ts: number}[] = raw ? JSON.parse(raw) : [];
+    if (!pending.some(p => p.buzzId === buzzId)) {
+      pending.push({buzzId, response, ts: Date.now()});
+      await AsyncStorage.setItem(PENDING_RESPONSES_KEY, JSON.stringify(pending));
+    }
+  } catch {}
+  return false;
+};
+
+/** Retry any buzz responses that failed to send (e.g. due to network outage). */
+export const flushPendingResponses = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_RESPONSES_KEY);
+    if (!raw) return;
+    const pending: {buzzId: string; response: string; ts: number}[] = JSON.parse(raw);
+    if (pending.length === 0) return;
+    const remaining: typeof pending = [];
+    for (const p of pending) {
+      if (Date.now() - p.ts > 600000) continue; // drop entries older than 10 min
+      const {error} = await supabase.from('buzzes').update({response: p.response, responded_at: p.ts}).eq('id', p.buzzId);
+      if (error) remaining.push(p);
+    }
+    if (remaining.length > 0) {
+      await AsyncStorage.setItem(PENDING_RESPONSES_KEY, JSON.stringify(remaining));
+    } else {
+      await AsyncStorage.removeItem(PENDING_RESPONSES_KEY);
+    }
+  } catch {}
 };
 
 export const deleteBuzzes = async (buzzIds: string[]) => {
@@ -470,3 +510,44 @@ export const getFcmToken = async () => {
   const messaging = getMessaging();
   return getToken(messaging);
 };
+
+// ─── Authenticated Admin Operations (via Edge Function) ────
+// These go through the admin-action Edge Function which verifies
+// the caller's PIN and role using the service_role key.
+
+const callAdminAction = async (
+  callerId: string,
+  callerPin: string,
+  action: string,
+  payload: Record<string, any> = {},
+): Promise<any> => {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-action`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({caller_id: callerId, pin: callerPin, action, payload}),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || `Admin action failed (${res.status})`);
+  return body;
+};
+
+export const adminAddUser = (callerId: string, callerPin: string, name: string, phone: string, pin: string, role: string) =>
+  callAdminAction(callerId, callerPin, 'admin_add_user', {name, phone, pin, role});
+
+export const adminRemoveUser = (callerId: string, callerPin: string, targetUserId: string) =>
+  callAdminAction(callerId, callerPin, 'admin_remove_user', {target_user_id: targetUserId});
+
+export const adminResetPin = (callerId: string, callerPin: string, targetUserId: string, newPin: string) =>
+  callAdminAction(callerId, callerPin, 'admin_reset_pin', {target_user_id: targetUserId, new_pin: newPin});
+
+export const adminUpdateRole = (callerId: string, callerPin: string, targetUserId: string, role: string) =>
+  callAdminAction(callerId, callerPin, 'admin_update_role', {target_user_id: targetUserId, role});
+
+export const updateOwnPin = (userId: string, currentPin: string, newPin: string) =>
+  callAdminAction(userId, currentPin, 'update_own_pin', {new_pin: newPin});
+
+export const deleteOwnAccount = (userId: string, pin: string) =>
+  callAdminAction(userId, pin, 'delete_own_account');

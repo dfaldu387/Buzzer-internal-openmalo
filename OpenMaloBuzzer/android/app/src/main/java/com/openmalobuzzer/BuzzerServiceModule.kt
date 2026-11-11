@@ -375,6 +375,13 @@ class BuzzerServiceModule(reactContext: ReactApplicationContext) :
         for (n in nm.activeNotifications) {
             if (n.tag == buzzId) nm.cancel(n.tag, n.id)
         }
+        // Restore the low-priority service notification (buzz was using NOTIFICATION_ID slot)
+        try {
+            val intent = android.content.Intent(reactApplicationContext, BuzzerService::class.java).apply {
+                action = BuzzerService.ACTION_STOP_ALARM
+            }
+            reactApplicationContext.startService(intent)
+        } catch (_: Exception) {}
     }
 
     // ─── DND Access ────────────────────────────────────────

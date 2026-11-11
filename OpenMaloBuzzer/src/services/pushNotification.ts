@@ -26,9 +26,10 @@ export const sendBuzzPush = async (
 ): Promise<PushResult> => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token,platform').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,fcm_token_stale,platform').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
     if (!fcmToken) return 'no_token';
+    if (tokenData?.fcm_token_stale) return 'token_invalid';
 
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -75,9 +76,9 @@ export const sendBuzzCancelledPush = async (
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token,platform').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,fcm_token_stale,platform').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken) return;
+    if (!fcmToken || tokenData?.fcm_token_stale) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -107,9 +108,9 @@ export const sendVoiceMailPush = async (
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token,platform').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,fcm_token_stale,platform').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken) return;
+    if (!fcmToken || tokenData?.fcm_token_stale) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',
@@ -143,9 +144,9 @@ export const sendEscalationPush = async (
 ) => {
   try {
     const {data: tokenData} = await supabase
-      .from('user_tokens').select('fcm_token,platform').eq('user_id', toUserId).maybeSingle();
+      .from('user_tokens').select('fcm_token,fcm_token_stale,platform').eq('user_id', toUserId).maybeSingle();
     const fcmToken = tokenData?.fcm_token;
-    if (!fcmToken) return;
+    if (!fcmToken || tokenData?.fcm_token_stale) return;
 
     await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
       method: 'POST',

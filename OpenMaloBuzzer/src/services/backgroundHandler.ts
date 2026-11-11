@@ -218,34 +218,40 @@ export const setupBackgroundHandler = () => {
       }
 
       if (data.type === 'buzz_cancelled') {
-        if (Platform.OS === 'ios') {
-          await notifee.cancelNotification(data.buzz_id);
-          // Stop the native looping alarm started by startAlarm()
-          try {
-            const {NativeModules} = require('react-native');
-            NativeModules.BuzzerAlarmModule?.stopAlarm?.();
-          } catch {}
-          return;
-        }
-
         const cancellerName = data.from_user_name || 'User';
-        // Stop the native BuzzerService alarm (MediaPlayer + Vibrator).
-        // Without this, the native alarm keeps playing until the next poll
-        // cycle (up to 10s) detects the cancellation on the server.
+
+        // Stop alarm + cancel original buzz notification on both platforms
         try {
           const {NativeModules} = require('react-native');
-          NativeModules.BuzzerService?.stopAlarm?.();
+          if (Platform.OS === 'ios') {
+            NativeModules.BuzzerAlarmModule?.stopAlarm?.();
+          } else {
+            NativeModules.BuzzerService?.stopAlarm?.();
+          }
         } catch {}
         await notifee.cancelNotification(data.buzz_id);
+
+        // Show silent "cancelled" notification so receiver knows a buzz was sent.
+        // Use a dedicated low-importance channel so no sound plays.
+        const CANCELLED_CHANNEL = 'openmalo_buzz_cancelled';
+        await notifee.createChannel({
+          id: CANCELLED_CHANNEL,
+          name: 'Buzz Cancelled',
+          importance: AndroidImportance.LOW,
+          vibration: false,
+        });
         await notifee.displayNotification({
           title: 'Buzz cancelled',
           body: `${cancellerName} cancelled the buzz`,
           android: {
-            channelId: NOTIFICATION_CHANNEL_ID,
-            importance: AndroidImportance.DEFAULT,
+            channelId: CANCELLED_CHANNEL,
+            importance: AndroidImportance.LOW,
             autoCancel: true,
-            timeoutAfter: 10000,
             pressAction: {id: 'default'},
+            sound: undefined,
+          },
+          ios: {
+            interruptionLevel: 'active',
           },
         });
       }

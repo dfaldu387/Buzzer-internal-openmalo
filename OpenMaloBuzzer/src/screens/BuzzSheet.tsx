@@ -86,31 +86,38 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
   const [selectedSound, setSelectedSound] = useState<string>(initialSound || 'buzz_alarm');
   const previewSoundRef = useRef<Sound | null>(null);
 
-  const previewSound = (soundId: string) => {
-    // Stop any currently playing preview
+  const [playingPreview, setPlayingPreview] = useState<string | null>(null);
+
+  const stopPreview = () => {
     if (previewSoundRef.current) {
       previewSoundRef.current.stop();
       previewSoundRef.current.release();
       previewSoundRef.current = null;
     }
+    setPlayingPreview(null);
+  };
+
+  const previewSound = (soundId: string) => {
+    // Tap same sound again → stop (toggle)
+    if (playingPreview === soundId && previewSoundRef.current) {
+      stopPreview();
+      return;
+    }
+    stopPreview();
     const soundOption = BUZZ_SOUNDS.find(s => s.id === soundId);
     if (!soundOption) return;
     const s = new Sound(soundOption.file, Sound.MAIN_BUNDLE, (err) => {
       if (err) return;
       s.setVolume(1.0);
-      s.play(() => { s.release(); if (previewSoundRef.current === s) previewSoundRef.current = null; });
+      s.play(() => { s.release(); if (previewSoundRef.current === s) { previewSoundRef.current = null; setPlayingPreview(null); } });
     });
     previewSoundRef.current = s;
+    setPlayingPreview(soundId);
   };
 
   // Cleanup preview on unmount
   useEffect(() => {
-    return () => {
-      if (previewSoundRef.current) {
-        previewSoundRef.current.stop();
-        previewSoundRef.current.release();
-      }
-    };
+    return () => { stopPreview(); };
   }, []);
 
   const [buzzState, setBuzzState] = useState<BuzzState>('select');
@@ -243,6 +250,7 @@ const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, a
 
   const sendBuzzToUser = async (targetUser: User, reason: string, buzzNote: string | null) => {
     if (sending) return;
+    stopPreview();
     setSending(true);
 
     // Network check — quick ping to verify connectivity before sending

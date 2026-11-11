@@ -603,10 +603,10 @@ describe('Group buzz — all members', () => {
 // ──────────────────────────────────────────────────────────
 
 describe('Network failure handling', () => {
-  it('sendBuzzPush does not throw on network error', async () => {
+  it('sendBuzzPush returns failed on network error', async () => {
     withToken('tok');
     fetchMock.mockRejectedValueOnce(new Error('Network error'));
-    await expect(sendBuzzPush('r1', 'b1', 's1', 'A', 'Test', null)).resolves.toBeUndefined();
+    await expect(sendBuzzPush('r1', 'b1', 's1', 'A', 'Test', null)).resolves.toBe('failed');
   });
 
   it('respondToBuzz logs warning on Supabase error but does not throw', async () => {
@@ -622,7 +622,7 @@ describe('Network failure handling', () => {
     };
 
     await respondToBuzz('fail-1', 'ack');
-    expect(warnSpy).toHaveBeenCalledWith('respondToBuzz failed:', 'fail-1', 'DB error');
+    expect(warnSpy).toHaveBeenCalledWith('respondToBuzz attempt 1 failed:', 'fail-1', 'DB error');
     warnSpy.mockRestore();
   });
 

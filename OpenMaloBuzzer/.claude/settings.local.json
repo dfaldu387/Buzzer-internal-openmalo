@@ -202,7 +202,12 @@
       "Bash(xcodebuild -workspace OpenMaloBuzzer.xcworkspace -scheme OpenMaloBuzzer -configuration Debug -destination \"id=00008101-001561D82610001E\" -allowProvisioningUpdates build)",
       "Bash(grep -r \"beginBackgroundTask\\\\|endBackgroundTask\\\\|applicationDidFinishLaunching\\\\|willTerminate\\\\|didEnterBackground\\\\|willEnterForeground\" /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/ios --include=*.swift --include=*.m -n)",
       "Bash(grep -r \"10\\\\|15\\\\|timeout\\\\|interrupt\\\\|defer\" /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/ios/OpenMaloBuzzer --include=*.swift -n)",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "Bash(grep -r \"onMessage\\\\|setForegroundMessageHandler\" /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/src --include=*.ts --include=*.tsx)",
+      "Bash(grep -n \"onRequestClose\" /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/src/screens/*.tsx)",
+      "Bash(sips:*)",
+      "Bash(ICON_DIR=\"/Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/ios/OpenMaloBuzzer/Images.xcassets/AppIcon.appiconset\" SOURCE=\"/Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png\" __NEW_LINE_591689ea0f131dc9__ for size in 20 29 40 58 60 76 80 83 87 120 152 167 180 1024)",
+      "Bash(do sips:*)"
     ]
   }
 }

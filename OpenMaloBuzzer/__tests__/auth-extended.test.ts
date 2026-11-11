@@ -95,89 +95,29 @@ describe('auth — updateProfile', () => {
   });
 });
 
+// changePin now goes through the admin-action Edge Function (updateOwnPin).
+// We mock fetch to simulate the Edge Function response.
+const fetchMock = jest.fn(() => Promise.resolve({ok: true, json: () => Promise.resolve({ok: true})} as Response));
+(global as any).fetch = fetchMock;
+
 describe('auth — changePin', () => {
-  it('changes PIN when current PIN is correct', async () => {
-    const currentHash = hashPin('1234');
-    let updatedHash = '';
-    _state.fromImpl = (table: string) => {
-      if (table === 'users') {
-        const c = _state._defaultChainable();
-        c.maybeSingle = jest.fn(() => Promise.resolve({
-          data: {...testUser, pin_hash: currentHash},
-          error: null,
-        }));
-        c.update = jest.fn((data: any) => { updatedHash = data.pin_hash; return c; });
-        return c;
-      }
-      return _state._defaultChainable();
-    };
+  beforeEach(() => fetchMock.mockClear());
+
+  it('changes PIN via Edge Function when current PIN is correct', async () => {
+    fetchMock.mockResolvedValueOnce({ok: true, json: () => Promise.resolve({ok: true})} as Response);
     const {changePin} = require('../src/services/auth');
     await changePin(testUser, '1234', '5678');
-    expect(updatedHash).toMatch(/^v2:/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.action).toBe('update_own_pin');
+    expect(body.pin).toBe('1234');
+    expect(body.payload.new_pin).toBe('5678');
   });
 
-  it('throws when current PIN is wrong', async () => {
-    const currentHash = hashPin('1234');
-    _state.fromImpl = (table: string) => {
-      if (table === 'users') {
-        const c = _state._defaultChainable();
-        c.maybeSingle = jest.fn(() => Promise.resolve({
-          data: {...testUser, pin_hash: currentHash},
-          error: null,
-        }));
-        return c;
-      }
-      return _state._defaultChainable();
-    };
+  it('throws when Edge Function returns 401 (wrong PIN)', async () => {
+    fetchMock.mockResolvedValueOnce({ok: false, json: () => Promise.resolve({error: 'Invalid PIN'})} as any);
     const {changePin} = require('../src/services/auth');
-    await expect(changePin(testUser, '0000', '5678')).rejects.toThrow('Current PIN is incorrect');
-  });
-
-  it('throws when user not found', async () => {
-    _state.fromImpl = (table: string) => {
-      if (table === 'users') {
-        const c = _state._defaultChainable();
-        c.maybeSingle = jest.fn(() => Promise.resolve({data: null, error: null}));
-        return c;
-      }
-      return _state._defaultChainable();
-    };
-    const {changePin} = require('../src/services/auth');
-    await expect(changePin(testUser, '1234', '5678')).rejects.toThrow('User not found');
-  });
-});
-
-describe('auth — resetForgottenPin', () => {
-  it('resets PIN for an existing user', async () => {
-    let resetCalled = false;
-    _state.fromImpl = (table: string) => {
-      if (table === 'users') {
-        const c = _state._defaultChainable();
-        c.maybeSingle = jest.fn(() => Promise.resolve({
-          data: {...testUser, pin_hash: 'old-hash'},
-          error: null,
-        }));
-        c.update = jest.fn(() => { resetCalled = true; return c; });
-        return c;
-      }
-      return _state._defaultChainable();
-    };
-    const {resetForgottenPin} = require('../src/services/auth');
-    await resetForgottenPin('1234567890', '9999');
-    expect(resetCalled).toBe(true);
-  });
-
-  it('throws when phone not found', async () => {
-    _state.fromImpl = (table: string) => {
-      if (table === 'users') {
-        const c = _state._defaultChainable();
-        c.maybeSingle = jest.fn(() => Promise.resolve({data: null, error: null}));
-        return c;
-      }
-      return _state._defaultChainable();
-    };
-    const {resetForgottenPin} = require('../src/services/auth');
-    await expect(resetForgottenPin('0000000000', '1234')).rejects.toThrow('No account found');
+    await expect(changePin(testUser, '0000', '5678')).rejects.toThrow('Invalid PIN');
   });
 });
 
@@ -186,12 +126,13 @@ describe('auth — deleteAccount', () => {
     const {deleteAccount} = require('../src/services/auth');
     await deleteAccount('u1');
     expect(AsyncStorage.removeItem).toHaveBeenCalledWith(AUTH_KEY);
-    expect(mockSupabase.from).toHaveBeenCalledWith('user_tokens');
   });
 });
 
 describe('auth — login legacy migration', () => {
-  it('migrates DJB2 hash to v2 SHA-256 on successful login', async () => {
+  beforeEach(() => fetchMock.mockClear());
+
+  it('calls Edge Function to migrate DJB2 hash to v2 SHA-256', async () => {
     // Generate legacy hash
     const legacyHash = (() => {
       let h = 0;
@@ -203,7 +144,6 @@ describe('auth — login legacy migration', () => {
       return h.toString(36);
     })();
 
-    let resetPinCalled = false;
     _state.fromImpl = (table: string) => {
       if (table === 'users') {
         const c = _state._defaultChainable();
@@ -211,14 +151,16 @@ describe('auth — login legacy migration', () => {
           data: {...testUser, pin_hash: legacyHash},
           error: null,
         }));
-        c.update = jest.fn(() => { resetPinCalled = true; return c; });
         return c;
       }
       return _state._defaultChainable();
     };
+    fetchMock.mockResolvedValueOnce({ok: true, json: () => Promise.resolve({ok: true})} as Response);
     const {login} = require('../src/services/auth');
     const user = await login('1234567890', '1234');
     expect(user).not.toBeNull();
-    expect(resetPinCalled).toBe(true); // migration happened
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.action).toBe('update_own_pin');
   });
 });

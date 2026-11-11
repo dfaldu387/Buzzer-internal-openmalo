@@ -54,6 +54,7 @@ class BuzzerService : Service() {
         const val EXTRA_SOUND_ID = "sound_id"
         const val BUZZ_CHANNEL_ID = "openmalo_buzz"
         const val BUZZ_VISUAL_CHANNEL_ID = "openmalo_buzz_visual"
+        const val CANCELLED_CHANNEL_ID = "openmalo_buzz_cancelled"
         const val VOICEMAIL_CHANNEL_ID = "openmalo_voicemail"
         const val PREFS_NAME = "buzzer_prefs"
         const val PREF_USER_ID = "active_user_id"
@@ -648,6 +649,8 @@ class BuzzerService : Service() {
                         put("user_id", userId)
                         put("fcm_token", token)
                         put("fcm_token_stale", false)
+                        put("token_updated_at", System.currentTimeMillis())
+                        put("platform", "android")
                     }
                     supabaseUpsert("user_tokens", body)
                 }
@@ -1164,6 +1167,7 @@ class BuzzerService : Service() {
         activeBuzzId?.let {
             getSystemService(NotificationManager::class.java).cancel(it.hashCode())
             activeBuzzId = null
+            restoreServiceNotification()
         }
     }
 
@@ -1173,6 +1177,18 @@ class BuzzerService : Service() {
         nm.cancel(buzzId, 0)
         for (n in nm.activeNotifications) {
             if (n.tag == buzzId) nm.cancel(n.tag, n.id)
+        }
+        // Restore the low-priority foreground service notification so Android
+        // doesn't kill the service for lacking a foreground notification.
+        restoreServiceNotification()
+    }
+
+    private fun restoreServiceNotification() {
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.notify(NOTIFICATION_ID, buildNotification())
+        } catch (e: Exception) {
+            Log.e(TAG, "restoreServiceNotification failed: ${e.message}")
         }
     }
 
@@ -1231,6 +1247,11 @@ class BuzzerService : Service() {
             // notification shows as a heads-up popup without playing audio.
             // All audio is handled by startAlarm() via MediaPlayer with USAGE_ALARM,
             // max volume, and audio focus — the notification is purely visual + action buttons.
+            //
+            // IMPORTANT: Post with NOTIFICATION_ID (the foreground service slot) so the
+            // buzz notification REPLACES the persistent "Listening for buzzes" notification.
+            // This prevents the user seeing two notifications (service + buzz) for one event.
+            // When the buzz is dismissed, restoreServiceNotification() puts back the original.
             val notification = NotificationCompat.Builder(this, BUZZ_VISUAL_CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("Buzz from $senderName")
@@ -1246,14 +1267,16 @@ class BuzzerService : Service() {
                 .addAction(0, coloredText("✗ Busy", 0xFFF44336.toInt()), respondIntent("busy", buzzId.hashCode() + 3))
                 .build()
 
-            getSystemService(NotificationManager::class.java).notify(buzzId.hashCode(), notification)
+            // Replace the foreground service notification with the buzz notification
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
 
             // Delayed cleanup: cancel any FCM/notifee duplicate notification
+            // (notifee uses buzzId as string tag, different from our NOTIFICATION_ID int)
             handler.postDelayed({
                 val nm2 = getSystemService(NotificationManager::class.java)
                 nm2.cancel(buzzId, 0)
                 for (n in nm2.activeNotifications) {
-                    if (n.tag == buzzId) nm2.cancel(n.tag, n.id)
+                    if (n.tag == buzzId && n.id != NOTIFICATION_ID) nm2.cancel(n.tag, n.id)
                 }
             }, 3000)
         }
@@ -1261,13 +1284,15 @@ class BuzzerService : Service() {
 
     private fun showCancelledNotification(buzzId: String, fromUserId: String) {
         resolveUserName(fromUserId) { senderName ->
-            val notification = NotificationCompat.Builder(this, BUZZ_CHANNEL_ID)
+            // Use a silent low-importance channel so no sound plays
+            createCancelledChannel()
+            val notification = NotificationCompat.Builder(this, CANCELLED_CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("Buzz cancelled")
                 .setContentText("$senderName cancelled the buzz")
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setAutoCancel(true)
-                .setTimeoutAfter(10000)
+                .setSilent(true)
                 .build()
             getSystemService(NotificationManager::class.java).notify((buzzId + "_cancel").hashCode(), notification)
         }
@@ -1290,6 +1315,19 @@ class BuzzerService : Service() {
             nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Buzzer Service", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Keeps Buzzer listening for incoming buzzes"
             })
+        }
+    }
+
+    private fun createCancelledChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(NotificationManager::class.java)
+            if (nm.getNotificationChannel(CANCELLED_CHANNEL_ID) == null) {
+                nm.createNotificationChannel(NotificationChannel(CANCELLED_CHANNEL_ID, "Buzz Cancelled", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Silent notification when a buzz is cancelled"
+                    setSound(null, null)
+                    enableVibration(false)
+                })
+            }
         }
     }
 
