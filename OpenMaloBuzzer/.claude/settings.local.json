@@ -216,7 +216,12 @@
       "Bash(grep -rn --include=*.json --include=*.plist --include=*.xml --include=*.swift --include=*.gradle --include=*.pro --include=*.kt -i openmalo /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/)",
       "Bash(grep -rn -i openmalo /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/ --include=*.ts --include=*.tsx --include=*.kt --include=*.swift --include=*.m --include=*.json --include=*.xml --include=*.sql --include=*.plist --include=*.gradle --include=*.pro --include=*.toml)",
       "Bash(grep -rn -i openmalo /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/ --include=*.ts --include=*.tsx --include=*.kt --include=*.swift --include=*.m --include=*.json --include=*.xml --include=*.sql --include=*.plist --include=*.gradle --include=*.pro --include=*.toml --include=*.entitlements --include=*.pbxproj --include=*.storyboard --include=*.xcscheme)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(cd:*)",
+      "Bash(/Users/admin/Library/Android/sdk/platform-tools/adb -s emulator-5554 uninstall com.buzzerapp 2>&1)",
+      "Bash(/Users/admin/Library/Android/sdk/platform-tools/adb -s emulator-5554 install /Users/admin/Desktop/Buzzer-2026-11-17.apk 2>&1)",
+      "Bash(/Users/admin/Library/Android/sdk/platform-tools/adb -s emulator-5554 shell pm list packages)"
     ]
   }
 }

@@ -145,7 +145,7 @@ const ProfileScreen: React.FC<Props> = ({
             style={[styles.input, phone.length > 0 && phone.length < 10 && {borderColor: '#F44336'}]}
             value={phone}
             onChangeText={t => setPhone(t.replace(/[^0-9]/g, ''))}
-            placeholder="Phone number (min 10 digits)"
+            placeholder="Phone number"
             placeholderTextColor="#666"
             keyboardType="phone-pad"
             maxLength={15}
