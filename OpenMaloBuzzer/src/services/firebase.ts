@@ -236,9 +236,10 @@ export const getBuzzLogPage = async (page = 0, userId?: string) => {
 };
 
 // ─── Reasons ─────────────────────────────────────────────
-export const getReasons = async () => {
-  const {data} = await supabase
-    .from('reasons').select('*').eq('is_active', true).order('sort_order');
+export const getReasons = async (tenantId?: string) => {
+  let query = supabase.from('reasons').select('*').eq('is_active', true);
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+  const {data} = await query.order('sort_order');
   return (data || []) as Reason[];
 };
 

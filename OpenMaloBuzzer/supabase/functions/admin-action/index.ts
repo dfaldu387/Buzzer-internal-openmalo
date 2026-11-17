@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
 
     // Authenticate caller
     const callers = await dbGet(
-      `users?id=eq.${encodeURIComponent(caller_id)}&is_active=eq.true&select=id,pin_hash,role`,
+      `users?id=eq.${encodeURIComponent(caller_id)}&is_active=eq.true&select=id,pin_hash,role,tenant_id`,
     );
     const caller = callers[0];
     if (!caller) return json({ error: "User not found" }, 401);
@@ -204,6 +204,7 @@ Deno.serve(async (req) => {
         const row = await dbPost("users", {
           name: payload.name,
           phone: payload.phone,
+          tenant_id: caller.tenant_id || "",
           pin_hash: pinHash,
           role: payload.role || "member",
           last_seen_at: 0,
