@@ -136,7 +136,7 @@ describe('auth — login legacy migration', () => {
     // Generate legacy hash
     const legacyHash = (() => {
       let h = 0;
-      const str = 'openmalo_1234_salt';
+      const str = 'buzzer_1234_salt';
       for (let i = 0; i < str.length; i++) {
         h = (h << 5) - h + str.charCodeAt(i);
         h |= 0;

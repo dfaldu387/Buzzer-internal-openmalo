@@ -183,21 +183,14 @@ export function verifyPin(pin: string, storedHash: string): boolean {
     for (let i = 0; i < 1000; i++) {
       hash = sha256(`${salt}:${hash}`);
     }
-    if (parts[2] === hash) return true;
-    // Legacy v2 salt (for users who hashed before the rename)
-    hash = sha256(`${salt}:${pin}:openmalo_buzzer_v2`);
-    for (let i = 0; i < 1000; i++) {
-      hash = sha256(`${salt}:${hash}`);
-    }
     return parts[2] === hash;
   }
-  // Legacy DJB2 format — kept for migration
-  return storedHash === legacyHashPin(pin);
+  return false;
 }
 
 function legacyHashPin(pin: string): string {
   let hash = 0;
-  const str = `openmalo_${pin}_salt`;
+  const str = `buzzer_${pin}_salt`;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = (hash << 5) - hash + char;

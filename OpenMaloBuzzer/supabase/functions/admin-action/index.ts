@@ -45,7 +45,7 @@ async function verifyPinV2(pin: string, stored: string): Promise<boolean> {
     if (diff === 0) return true;
   }
   // Fall back to legacy salt for existing users
-  h = await sha256Hex(`${salt}:${pin}:openmalo_buzzer_v2`);
+  h = await sha256Hex(`${salt}:${pin}:buzzer_app_v2`);
   for (let i = 0; i < 1000; i++) h = await sha256Hex(`${salt}:${h}`);
   if (parts[2].length !== h.length) return false;
   let diff = 0;
@@ -56,7 +56,7 @@ async function verifyPinV2(pin: string, stored: string): Promise<boolean> {
 
 function verifyPinLegacy(pin: string, stored: string): boolean {
   let hash = 0;
-  const str = `openmalo_${pin}_salt`;
+  const str = `buzzer_${pin}_salt`;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
   }
