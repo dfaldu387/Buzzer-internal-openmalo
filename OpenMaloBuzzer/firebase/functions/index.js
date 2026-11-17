@@ -187,7 +187,7 @@ exports.onVoiceMessageCreated = functions.firestore
           priority: 'high',
           ttl: 0,
           notification: {
-            channelId: 'openmalo_voicemail',
+            channelId: 'buzzer_voicemail',
             sound: 'default',
           },
         },

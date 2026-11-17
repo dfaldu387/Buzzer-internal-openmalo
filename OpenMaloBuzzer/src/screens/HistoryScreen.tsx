@@ -67,7 +67,7 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
   const insets = useSafeAreaInsets();
   const [buzzes, setBuzzes] = useState<Buzz[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, string>>({});
-  const {groups} = useGroups();
+  const {groups} = useGroups(currentUser.tenant_id);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<string>('all');
@@ -94,7 +94,7 @@ const HistoryScreen: React.FC<Props> = ({currentUser, onBack}) => {
       try {
         const [page, userList] = await Promise.all([
           getBuzzLogPage(0, currentUser.id),
-          getUsers(),
+          getUsers(currentUser.tenant_id),
         ]);
         setBuzzes(page.buzzes);
         lastDocRef.current = page.lastDoc;

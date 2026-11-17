@@ -185,7 +185,8 @@ export function verifyPin(pin: string, storedHash: string): boolean {
     }
     return parts[2] === hash;
   }
-  return false;
+  // Legacy DJB2 format — kept for migration
+  return storedHash === legacyHashPin(pin);
 }
 
 function legacyHashPin(pin: string): string {
