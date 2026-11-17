@@ -26,7 +26,7 @@ import {subscribeToVoiceMails, subscribeToMissedBuzzes, markVoiceMailListened, d
 import {supabase} from '../services/supabase';
 import {BUZZ_SOUNDS} from '../services/soundPreference';
 
-const getLogViewedKey = (userId: string) => `@openmalo_log_viewed_${userId}`;
+const getLogViewedKey = (userId: string) => `@buzzer_log_viewed_${userId}`;
 
 interface FavoriteEntry {
   userId: string;
@@ -87,13 +87,13 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
 
   // Load mute state on mount
   useEffect(() => {
-    AsyncStorage.getItem('@openmalo_muted').then(v => { if (v === 'true') setMuted(true); });
+    AsyncStorage.getItem('@buzzer_muted').then(v => { if (v === 'true') setMuted(true); });
   }, []);
 
   const toggleMute = () => {
     const newVal = !muted;
     setMuted(newVal);
-    AsyncStorage.setItem('@openmalo_muted', newVal ? 'true' : 'false');
+    AsyncStorage.setItem('@buzzer_muted', newVal ? 'true' : 'false');
     if (Platform.OS === 'android') {
       NativeModules.BuzzerService?.setMuted?.(newVal);
     }
@@ -160,7 +160,7 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
       const map: Record<string, string> = {};
       u.forEach(user => { map[user.id] = user.name; });
       setUsersMap(map);
-    });
+    }, currentUser.tenant_id);
     return () => { unsub(); unsub2(); };
   }, [currentUser.id]);
 

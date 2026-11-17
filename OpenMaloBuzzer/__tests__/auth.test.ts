@@ -42,7 +42,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {hashPin} from '../src/services/crypto';
 
 const {_state} = require('../src/services/supabase');
-const AUTH_KEY = '@openmalo_user';
+const AUTH_KEY = '@buzzer_user';
 
 beforeEach(() => {
   jest.clearAllMocks();

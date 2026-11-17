@@ -1,8 +1,8 @@
 import {Alert, NativeModules, Platform} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BATTERY_PROMPT_KEY = '@openmalo_battery_prompted';
-const BATTERY_RECHEK_KEY = '@openmalo_battery_recheck_ts';
+const BATTERY_PROMPT_KEY = '@buzzer_battery_prompted';
+const BATTERY_RECHEK_KEY = '@buzzer_battery_recheck_ts';
 // Don't re-prompt more than once per 24 hours to avoid nagging
 const RECHECK_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
@@ -190,7 +190,7 @@ export const checkAndPromptBattery = async (): Promise<BatteryInfo | null> => {
 const showGenericPrompt = () => {
   Alert.alert(
     'Important: Allow Background Activity',
-    'To receive buzzes when the app is closed, you must disable battery optimization for this app.\n\nGo to:\nSettings → Apps → OpenMalo Buzzer → Battery → Unrestricted',
+    'To receive buzzes when the app is closed, you must disable battery optimization for this app.\n\nGo to:\nSettings → Apps → Buzzer → Battery → Unrestricted',
     [
       {
         text: 'Open Settings',

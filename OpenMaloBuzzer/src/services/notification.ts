@@ -23,7 +23,7 @@ export const createNotificationChannel = async () => {
       ],
     }]);
   }
-  // The buzz channel (openmalo_buzz) is created ONLY by the native
+  // The buzz channel (buzzer_alerts) is created ONLY by the native
   // BuzzerService.createBuzzChannel() in Kotlin, which sets USAGE_ALARM
   // audio attributes and bypassDnd=true. Notifee's createChannel API
   // does not support USAGE_ALARM and would overwrite the native channel

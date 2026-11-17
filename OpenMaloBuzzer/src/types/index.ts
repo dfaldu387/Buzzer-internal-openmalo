@@ -42,6 +42,7 @@ export interface Reason {
   label: string;
   sort_order: number;
   is_active: boolean;
+  tenant_id?: string;
 }
 
 export interface Group {

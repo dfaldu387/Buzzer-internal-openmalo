@@ -104,7 +104,7 @@ function App() {
       const map: Record<string, string> = {};
       users.forEach(u => { map[u.id] = u.name; });
       usersMapRef.current = map;
-    });
+    }, user.tenant_id);
     return unsub;
   }, [user]);
 
@@ -420,9 +420,9 @@ function App() {
         // This is the most reliable path for iOS notification taps from
         // background/killed state — Firebase's handlers are unreliable for APNs.
         try {
-          const tapData = await AsyncStorage.getItem('@openmalo_pending_tap');
+          const tapData = await AsyncStorage.getItem('@buzzer_pending_tap');
           if (tapData) {
-            await AsyncStorage.removeItem('@openmalo_pending_tap');
+            await AsyncStorage.removeItem('@buzzer_pending_tap');
             const parsed = JSON.parse(tapData);
             if (parsed.buzz_id) {
               setIncomingPayload(prev => {

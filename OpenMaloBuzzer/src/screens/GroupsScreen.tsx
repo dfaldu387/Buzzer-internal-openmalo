@@ -15,7 +15,7 @@ interface Props {
 
 const GroupsScreen: React.FC<Props> = ({currentUser, onBack, onBuzzGroup, initialEditGroup}) => {
   const insets = useSafeAreaInsets();
-  const {groups} = useGroups();
+  const {groups} = useGroups(currentUser.tenant_id);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -26,7 +26,7 @@ const GroupsScreen: React.FC<Props> = ({currentUser, onBack, onBuzzGroup, initia
   useEffect(() => {
     const unsub = subscribeToUsers(users => {
       setAllUsers(users);
-    });
+    }, currentUser.tenant_id);
     return unsub;
   }, [currentUser.id]);
 
@@ -62,6 +62,7 @@ const GroupsScreen: React.FC<Props> = ({currentUser, onBack, onBuzzGroup, initia
       created_by: currentUser.id,
       created_at: Date.now(),
       is_active: true,
+      tenant_id: currentUser.tenant_id,
     });
     setGroupName('');
     setSelectedIds(new Set());

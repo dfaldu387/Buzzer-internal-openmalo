@@ -84,8 +84,10 @@ export const removeUser = async (userId: string) => {
   await supabase.from('users').delete().eq('id', userId);
 };
 
-export const removeInactiveByPhone = async (phone: string) => {
-  await supabase.from('users').delete().eq('phone', phone).eq('is_active', false);
+export const removeInactiveByPhone = async (phone: string, tenantId?: string) => {
+  let query = supabase.from('users').delete().eq('phone', phone).eq('is_active', false);
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+  await query;
 };
 
 export const resetUserPin = async (userId: string, pinHash: string) => {
@@ -126,7 +128,7 @@ export const createBuzz = async (buzz: Omit<Buzz, 'id'>) => {
   return {id: data.id};
 };
 
-const PENDING_RESPONSES_KEY = '@openmalo_pending_responses';
+const PENDING_RESPONSES_KEY = '@buzzer_pending_responses';
 
 export const respondToBuzz = async (buzzId: string, response: BuzzResponse): Promise<boolean> => {
   for (let attempt = 0; attempt < 3; attempt++) {

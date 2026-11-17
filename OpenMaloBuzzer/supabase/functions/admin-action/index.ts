@@ -26,7 +26,7 @@ function generateSalt(): string {
 
 async function hashPinV2(pin: string): Promise<string> {
   const salt = generateSalt();
-  let h = await sha256Hex(`${salt}:${pin}:openmalo_buzzer_v2`);
+  let h = await sha256Hex(`${salt}:${pin}:buzzer_app_v2`);
   for (let i = 0; i < 1000; i++) h = await sha256Hex(`${salt}:${h}`);
   return `v2:${salt}:${h}`;
 }
@@ -35,9 +35,18 @@ async function verifyPinV2(pin: string, stored: string): Promise<boolean> {
   const parts = stored.split(":");
   if (parts.length !== 3) return false;
   const salt = parts[1];
-  let h = await sha256Hex(`${salt}:${pin}:openmalo_buzzer_v2`);
+  // Try current salt first
+  let h = await sha256Hex(`${salt}:${pin}:buzzer_app_v2`);
   for (let i = 0; i < 1000; i++) h = await sha256Hex(`${salt}:${h}`);
-  // Constant-time comparison
+  if (parts[2].length === h.length) {
+    let diff = 0;
+    for (let i = 0; i < h.length; i++)
+      diff |= parts[2].charCodeAt(i) ^ h.charCodeAt(i);
+    if (diff === 0) return true;
+  }
+  // Fall back to legacy salt for existing users
+  h = await sha256Hex(`${salt}:${pin}:openmalo_buzzer_v2`);
+  for (let i = 0; i < 1000; i++) h = await sha256Hex(`${salt}:${h}`);
   if (parts[2].length !== h.length) return false;
   let diff = 0;
   for (let i = 0; i < h.length; i++)

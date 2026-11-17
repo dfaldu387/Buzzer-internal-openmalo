@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Platform, NativeModules} from 'react-native';
 
-const STORAGE_KEY = '@openmalo_buzz_sound';
+const STORAGE_KEY = '@buzzer_sound';
 
 export interface BuzzSoundOption {
   id: string;

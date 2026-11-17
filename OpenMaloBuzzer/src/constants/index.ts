@@ -19,10 +19,10 @@ export const RECOVERY_BUZZ_WINDOW_MS = 0; // 0 = no time limit
 // the full loud alarm, since the sender's request is no longer urgent.
 export const STALE_BUZZ_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
-export const NOTIFICATION_CHANNEL_ID = 'openmalo_buzz';
-export const NOTIFICATION_CHANNEL_NAME = 'OpenMalo Buzz';
+export const NOTIFICATION_CHANNEL_ID = 'buzzer_alerts';
+export const NOTIFICATION_CHANNEL_NAME = 'Buzzer Alerts';
 
-export const VOICEMAIL_CHANNEL_ID = 'openmalo_voicemail';
+export const VOICEMAIL_CHANNEL_ID = 'buzzer_voicemail';
 export const VOICEMAIL_CHANNEL_NAME = 'Voice Messages';
 
 export const COLLECTIONS = {

@@ -270,22 +270,22 @@ describe('Background — FCM background handler', () => {
     const notifee = require('@notifee/react-native').default;
     // Fallback channel should be created
     expect(notifee.createChannel).toHaveBeenCalledWith(expect.objectContaining({
-      id: expect.stringMatching(/^openmalo_buzz_fallback/),
+      id: expect.stringMatching(/^buzzer_fallback/),
       sound: 'buzz_alarm',
       vibration: true,
     }));
-    // Notification posted on fallback channel, NOT native openmalo_buzz
+    // Notification posted on fallback channel, NOT native buzzer_alerts
     expect(notifee.displayNotification).toHaveBeenCalledWith(expect.objectContaining({
       id: 'bg-1',
       title: 'Buzz from Heena',
       android: expect.objectContaining({
-        channelId: expect.stringMatching(/^openmalo_buzz_fallback/),
+        channelId: expect.stringMatching(/^buzzer_fallback/),
         sound: 'buzz_alarm',
       }),
     }));
   });
 
-  it('does NOT use native openmalo_buzz channel (prevents corruption)', async () => {
+  it('does NOT use native buzzer_alerts channel (prevents corruption)', async () => {
     await bgHandler!({data: {
       type: 'buzz', buzz_id: 'bg-2', from_user_id: 's1',
       from_user_name: 'Bob', reason: 'Meeting', note: '',
@@ -293,8 +293,8 @@ describe('Background — FCM background handler', () => {
 
     const notifee = require('@notifee/react-native').default;
     const channelId = notifee.displayNotification.mock.calls[0][0].android.channelId;
-    expect(channelId).toMatch(/^openmalo_buzz_fallback/);
-    expect(channelId).not.toBe('openmalo_buzz');
+    expect(channelId).toMatch(/^buzzer_fallback/);
+    expect(channelId).not.toBe('buzzer_alerts');
   });
 
   it('includes vibration pattern on fallback channel', async () => {
@@ -329,7 +329,7 @@ describe('Background — FCM background handler', () => {
 
     const notifee = require('@notifee/react-native').default;
     expect(notifee.createChannel).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'openmalo_voicemail',
+      id: 'buzzer_voicemail',
       sound: 'default',
     }));
     expect(notifee.displayNotification).toHaveBeenCalledWith(expect.objectContaining({

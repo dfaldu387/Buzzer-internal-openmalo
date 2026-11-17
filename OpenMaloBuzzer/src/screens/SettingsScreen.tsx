@@ -33,8 +33,8 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
   }>({visible: false, title: '', message: ''});
 
   useEffect(() => {
-    const unsub1 = subscribeToUsers(setUsers);
-    const unsub2 = subscribeToReasons(setReasons);
+    const unsub1 = subscribeToUsers(setUsers, currentUser.tenant_id);
+    const unsub2 = subscribeToReasons(setReasons, currentUser.tenant_id);
     return () => { unsub1(); unsub2(); };
   }, []);
 
@@ -146,7 +146,7 @@ const SettingsScreen: React.FC<Props> = ({currentUser, onBack}) => {
       showAlert('Limit Reached', `Maximum ${MAX_REASONS} reasons allowed`);
       return;
     }
-    await addReason(newReasonLabel.trim(), reasons.length);
+    await addReason(newReasonLabel.trim(), reasons.length, currentUser.tenant_id);
     setNewReasonLabel('');
   };
 

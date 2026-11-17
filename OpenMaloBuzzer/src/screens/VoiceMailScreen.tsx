@@ -40,7 +40,7 @@ const VoiceMailScreen: React.FC<Props> = ({currentUser, targetUser, onBack}) => 
       const map: Record<string, string> = {};
       users.forEach(u => { map[u.id] = u.name; });
       setUsersMap(map);
-    });
+    }, currentUser.tenant_id);
     return () => {
       unsub1();
       unsub2();

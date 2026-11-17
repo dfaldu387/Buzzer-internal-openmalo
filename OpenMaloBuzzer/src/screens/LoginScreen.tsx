@@ -33,10 +33,10 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
 
   // Restore last used phone number and company code
   useEffect(() => {
-    AsyncStorage.getItem('@openmalo_last_phone').then(saved => {
+    AsyncStorage.getItem('@buzzer_last_phone').then(saved => {
       if (saved) setPhone(saved);
     });
-    AsyncStorage.getItem('@openmalo_tenant').then(saved => {
+    AsyncStorage.getItem('@buzzer_tenant').then(saved => {
       if (saved) setCompanyCode(saved);
     });
   }, []);
@@ -89,7 +89,7 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
     try {
       const user = await onLogin(phone, pin, companyCode.trim());
       if (user) {
-        AsyncStorage.setItem('@openmalo_last_phone', phone).catch(() => {});
+        AsyncStorage.setItem('@buzzer_last_phone', phone).catch(() => {});
       }
     } catch (e: any) {
       setAlertModal({visible: true, title: 'Login Failed', message: e?.message || 'Something went wrong. Try again.'});

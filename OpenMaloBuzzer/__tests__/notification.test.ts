@@ -25,7 +25,7 @@ describe('createNotificationChannel', () => {
     await createNotificationChannel();
     expect(notifee.createChannel).toHaveBeenCalledTimes(1);
     expect(notifee.createChannel).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'openmalo_voicemail',
+      id: 'buzzer_voicemail',
       name: 'Voice Messages',
       importance: AndroidImportance.HIGH,
       visibility: AndroidVisibility.PUBLIC,
@@ -38,8 +38,8 @@ describe('createNotificationChannel', () => {
     await createNotificationChannel();
     const calls = (notifee.createChannel as jest.Mock).mock.calls;
     const channelIds = calls.map((c: any[]) => c[0].id);
-    expect(channelIds).not.toContain('openmalo_buzz');
-    expect(channelIds).not.toContain('openmalo_buzz_visual');
+    expect(channelIds).not.toContain('buzzer_alerts');
+    expect(channelIds).not.toContain('buzzer_alerts_visual');
   });
 });
 

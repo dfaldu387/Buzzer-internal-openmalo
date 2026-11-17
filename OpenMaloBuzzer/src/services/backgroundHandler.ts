@@ -20,7 +20,7 @@ export const setupBackgroundHandler = () => {
       if (buzzId) {
         try {
           const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-          await AsyncStorage.setItem('@openmalo_pending_tap', JSON.stringify({
+          await AsyncStorage.setItem('@buzzer_pending_tap', JSON.stringify({
             buzz_id: buzzId,
             from_user_id: (nData.from_user_id as string) || '',
             from_user_name: (nData.from_user_name as string) || 'User',
@@ -137,7 +137,7 @@ export const setupBackgroundHandler = () => {
         const senderName = data.from_user_name || 'User';
         const buzzSoundName = data.sound_id || 'buzz_alarm';
 
-        const FALLBACK_CHANNEL_ID = `openmalo_buzz_fallback_${buzzSoundName}`;
+        const FALLBACK_CHANNEL_ID = `buzzer_fallback_${buzzSoundName}`;
         await notifee.createChannel({
           id: FALLBACK_CHANNEL_ID,
           name: `Buzzer Alerts (${buzzSoundName.replace('buzz_alarm', 'Sound').replace('_', ' ')})`,
@@ -233,7 +233,7 @@ export const setupBackgroundHandler = () => {
 
         // Show silent "cancelled" notification so receiver knows a buzz was sent.
         // Use a dedicated low-importance channel so no sound plays.
-        const CANCELLED_CHANNEL = 'openmalo_buzz_cancelled';
+        const CANCELLED_CHANNEL = 'buzzer_cancelled';
         await notifee.createChannel({
           id: CANCELLED_CHANNEL,
           name: 'Buzz Cancelled',

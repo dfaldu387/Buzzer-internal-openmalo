@@ -63,8 +63,8 @@ const REPUSH_INTERVAL_MS = 10000;
 
 const BuzzSheet: React.FC<Props> = ({sender, receiver, onClose, initialReason, autoSend, initialSound}) => {
   const insets = useSafeAreaInsets();
-  const reasons = useReasons();
-  const {users, isOnline} = useUsers(sender.id);
+  const reasons = useReasons(sender.tenant_id);
+  const {users, isOnline} = useUsers(sender.id, sender.tenant_id);
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [isOther, setIsOther] = useState(false);
   const [customReason, setCustomReason] = useState('');

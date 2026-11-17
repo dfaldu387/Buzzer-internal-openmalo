@@ -7,8 +7,8 @@ import {clearUserCache} from '../hooks/useUsers';
 import {clearReasonCache} from '../hooks/useReasons';
 import {clearGroupCache} from '../hooks/useGroups';
 
-const AUTH_KEY = '@openmalo_user';
-const TENANT_KEY = '@openmalo_tenant';
+const AUTH_KEY = '@buzzer_user';
+const TENANT_KEY = '@buzzer_tenant';
 
 const storeUser = async (user: User) => {
   const {pin_hash: _, ...safeUser} = user;
@@ -83,7 +83,7 @@ export const signup = async (
   if (existing) throw new Error('Phone number already registered');
 
   // Remove any inactive user with same phone (soft-deleted accounts)
-  await removeInactiveByPhone(phone);
+  await removeInactiveByPhone(phone, tenantId);
 
   const {hashPin} = require('./crypto');
   const userData: Omit<User, 'id'> = {

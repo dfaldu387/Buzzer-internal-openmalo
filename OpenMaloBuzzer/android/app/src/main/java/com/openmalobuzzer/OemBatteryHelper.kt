@@ -298,8 +298,8 @@ object OemBatteryHelper {
             Oem.XIAOMI -> OemInstructions(
                 oemName = "Xiaomi/Redmi/POCO",
                 steps = "1. Tap 'Open Settings' below\n" +
-                        "2. Find 'OpenMalo Buzzer' and enable Autostart\n" +
-                        "3. Go back to Settings → Apps → OpenMalo Buzzer → Battery Saver → No restrictions\n" +
+                        "2. Find 'Buzzer' and enable Autostart\n" +
+                        "3. Go back to Settings → Apps → Buzzer → Battery Saver → No restrictions\n" +
                         "4. Also check: Settings → Battery → Battery Saver → turn OFF or exclude this app",
                 hasAutostart = true,
                 needsManualStep = true
@@ -307,7 +307,7 @@ object OemBatteryHelper {
             Oem.HUAWEI -> OemInstructions(
                 oemName = "Huawei/Honor",
                 steps = "1. Tap 'Open Settings' below\n" +
-                        "2. Find 'OpenMalo Buzzer'\n" +
+                        "2. Find 'Buzzer'\n" +
                         "3. Set to 'Manage manually' and enable ALL three toggles:\n" +
                         "   - Auto-launch\n" +
                         "   - Secondary launch\n" +
@@ -318,53 +318,53 @@ object OemBatteryHelper {
             Oem.SAMSUNG -> OemInstructions(
                 oemName = "Samsung",
                 steps = "1. Go to Settings → Battery → Background usage limits\n" +
-                        "2. Tap 'Sleeping apps' — remove OpenMalo Buzzer if listed\n" +
-                        "3. Tap 'Deep sleeping apps' — remove OpenMalo Buzzer if listed\n" +
-                        "4. Tap 'Never sleeping apps' — add OpenMalo Buzzer",
+                        "2. Tap 'Sleeping apps' — remove Buzzer if listed\n" +
+                        "3. Tap 'Deep sleeping apps' — remove Buzzer if listed\n" +
+                        "4. Tap 'Never sleeping apps' — add Buzzer",
                 hasAutostart = false,
                 needsManualStep = true
             )
             Oem.OPPO -> OemInstructions(
                 oemName = "Oppo/Realme",
                 steps = "1. Tap 'Open Settings' below\n" +
-                        "2. Find 'OpenMalo Buzzer' and enable Auto-launch\n" +
-                        "3. Go to Settings → Battery → OpenMalo Buzzer → Allow background activity",
+                        "2. Find 'Buzzer' and enable Auto-launch\n" +
+                        "3. Go to Settings → Battery → Buzzer → Allow background activity",
                 hasAutostart = true,
                 needsManualStep = true
             )
             Oem.VIVO -> OemInstructions(
                 oemName = "Vivo",
                 steps = "1. Tap 'Open Settings' below\n" +
-                        "2. Find 'OpenMalo Buzzer' and enable background autostart\n" +
+                        "2. Find 'Buzzer' and enable background autostart\n" +
                         "3. Go to Settings → Battery → High background power consumption → Allow",
                 hasAutostart = true,
                 needsManualStep = true
             )
             Oem.ONEPLUS -> OemInstructions(
                 oemName = "OnePlus",
-                steps = "1. Go to Settings → Apps → OpenMalo Buzzer → Battery → Don't optimize\n" +
-                        "2. Also check: Settings → Battery → Battery Optimization → All apps → OpenMalo Buzzer → Don't optimize",
+                steps = "1. Go to Settings → Apps → Buzzer → Battery → Don't optimize\n" +
+                        "2. Also check: Settings → Battery → Battery Optimization → All apps → Buzzer → Don't optimize",
                 hasAutostart = false,
                 needsManualStep = true
             )
             Oem.MOTOROLA -> OemInstructions(
                 oemName = "Motorola/Lenovo",
                 steps = "1. Go to Settings → Battery → Adaptive Battery → turn OFF\n" +
-                        "2. Go to Settings → Apps → OpenMalo Buzzer → Battery → Unrestricted",
+                        "2. Go to Settings → Apps → Buzzer → Battery → Unrestricted",
                 hasAutostart = false,
                 needsManualStep = true
             )
             Oem.TRANSSION -> OemInstructions(
                 oemName = "Tecno/Infinix/itel",
                 steps = "1. Tap 'Open Settings' below\n" +
-                        "2. Find 'OpenMalo Buzzer' and enable Autostart\n" +
-                        "3. Go to Phone Master → Battery Manager → set OpenMalo Buzzer to 'Allow background'",
+                        "2. Find 'Buzzer' and enable Autostart\n" +
+                        "3. Go to Phone Master → Battery Manager → set Buzzer to 'Allow background'",
                 hasAutostart = true,
                 needsManualStep = true
             )
             Oem.STOCK -> OemInstructions(
                 oemName = "Android",
-                steps = "1. Go to Settings → Apps → OpenMalo Buzzer → Battery → Unrestricted",
+                steps = "1. Go to Settings → Apps → Buzzer → Battery → Unrestricted",
                 hasAutostart = false,
                 needsManualStep = false
             )
@@ -384,7 +384,7 @@ object OemBatteryHelper {
             val appInfo = context.packageManager.getApplicationInfo(context.packageName, 0)
             context.packageManager.getApplicationLabel(appInfo).toString()
         } catch (e: Exception) {
-            "OpenMalo Buzzer"
+            "Buzzer"
         }
     }
 }

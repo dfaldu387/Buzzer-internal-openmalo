@@ -26,7 +26,7 @@ const RESPONSE_CONFIG: Record<BuzzResponse, {label: string; color: string; icon:
 
 const GroupBuzzSheet: React.FC<Props> = ({sender, group, onClose}) => {
   const insets = useSafeAreaInsets();
-  const reasons = useReasons();
+  const reasons = useReasons(sender.tenant_id);
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [isOther, setIsOther] = useState(false);
   const [customReason, setCustomReason] = useState('');
@@ -47,7 +47,7 @@ const GroupBuzzSheet: React.FC<Props> = ({sender, group, onClose}) => {
       const map: Record<string, string> = {};
       users.forEach(u => { map[u.id] = u.name; });
       setUsersMap(map);
-    });
+    }, sender.tenant_id);
     return () => {
       unsub();
       unsubsRef.current.forEach(u => u());

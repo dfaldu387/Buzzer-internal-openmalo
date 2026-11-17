@@ -22,8 +22,8 @@ describe('constants', () => {
   it('PRESENCE_TIMEOUT_MS is 30 seconds', () => expect(PRESENCE_TIMEOUT_MS).toBe(30000));
 
   it('notification channel IDs match BuzzerService native constants', () => {
-    expect(NOTIFICATION_CHANNEL_ID).toBe('openmalo_buzz');
-    expect(VOICEMAIL_CHANNEL_ID).toBe('openmalo_voicemail');
+    expect(NOTIFICATION_CHANNEL_ID).toBe('buzzer_alerts');
+    expect(VOICEMAIL_CHANNEL_ID).toBe('buzzer_voicemail');
   });
 
   it('COLLECTIONS has all required tables', () => {

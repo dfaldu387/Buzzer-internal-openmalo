@@ -48,7 +48,7 @@ describe('promptBatteryOptimization', () => {
   it('marks as prompted in AsyncStorage', async () => {
     const {promptBatteryOptimization} = require('../src/services/batteryOptimization');
     await promptBatteryOptimization();
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@openmalo_battery_prompted', 'true');
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@buzzer_battery_prompted', 'true');
   });
 
   it('shows generic prompt when native module unavailable', async () => {

@@ -165,7 +165,7 @@ function generateSalt(): string {
 /** Hash a PIN with a random salt and 1000 rounds of SHA-256. */
 export function hashPin(pin: string): string {
   const salt = generateSalt();
-  let hash = sha256(`${salt}:${pin}:openmalo_buzzer_v2`);
+  let hash = sha256(`${salt}:${pin}:buzzer_app_v2`);
   for (let i = 0; i < 1000; i++) {
     hash = sha256(`${salt}:${hash}`);
   }
@@ -178,7 +178,14 @@ export function verifyPin(pin: string, storedHash: string): boolean {
     const parts = storedHash.split(':');
     if (parts.length !== 3) return false;
     const salt = parts[1];
-    let hash = sha256(`${salt}:${pin}:openmalo_buzzer_v2`);
+    // Try current salt first, fall back to legacy salt for existing users
+    let hash = sha256(`${salt}:${pin}:buzzer_app_v2`);
+    for (let i = 0; i < 1000; i++) {
+      hash = sha256(`${salt}:${hash}`);
+    }
+    if (parts[2] === hash) return true;
+    // Legacy v2 salt (for users who hashed with the old salt)
+    hash = sha256(`${salt}:${pin}:openmalo_buzzer_v2`);
     for (let i = 0; i < 1000; i++) {
       hash = sha256(`${salt}:${hash}`);
     }

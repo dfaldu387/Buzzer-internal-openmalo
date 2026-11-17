@@ -1,4 +1,4 @@
--- OpenMalo Buzzer - Supabase Database Schema
+-- Buzzer App - Supabase Database Schema
 -- Run this in Supabase SQL Editor: https://supabase.com/dashboard/project/uqjlftjosdufuxivpahi/sql
 
 -- Users

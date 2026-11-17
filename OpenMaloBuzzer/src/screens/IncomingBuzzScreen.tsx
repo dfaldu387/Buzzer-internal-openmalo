@@ -92,7 +92,7 @@ const IncomingBuzzScreen: React.FC<Props> = ({payload, onDismiss}) => {
         Vibration.vibrate([0, 400, 200, 400]);
         return;
       }
-      const isMuted = (await AsyncStorage.getItem('@openmalo_muted')) === 'true';
+      const isMuted = (await AsyncStorage.getItem('@buzzer_muted')) === 'true';
 
       if (!isMuted) {
         // Use the native BuzzerAlarmModule for alarm playback.
