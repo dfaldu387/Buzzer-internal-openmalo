@@ -1,4 +1,4 @@
-package com.openmalobuzzer
+package com.buzzerapp
 
 import android.content.Context
 import android.content.Intent

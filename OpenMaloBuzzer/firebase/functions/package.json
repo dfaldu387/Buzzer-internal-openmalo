@@ -1,6 +1,6 @@
 {
-  "name": "openmalo-buzzer-functions",
-  "description": "Cloud Functions for OpenMalo Buzzer",
+  "name": "buzzer-functions",
+  "description": "Cloud Functions for Buzzer",
   "engines": {
     "node": "18"
   },

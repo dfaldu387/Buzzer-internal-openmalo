@@ -1,4 +1,4 @@
-package com.openmalobuzzer
+package com.buzzerapp
 
 import android.app.*
 import android.content.Context
@@ -38,12 +38,12 @@ class BuzzerService : Service() {
         const val CHANNEL_ID = "buzzer_service_channel"
         const val NOTIFICATION_ID = 1001
         const val RESTART_REQUEST_CODE = 9999
-        const val ACTION_START = "com.openmalobuzzer.START_SERVICE"
-        const val ACTION_STOP = "com.openmalobuzzer.STOP_SERVICE"
-        const val ACTION_STOP_ALARM = "com.openmalobuzzer.STOP_ALARM"
-        const val ACTION_RESPOND = "com.openmalobuzzer.RESPOND"
-        const val ACTION_SHOW_BUZZ = "com.openmalobuzzer.SHOW_BUZZ"
-        const val ACTION_START_ALARM = "com.openmalobuzzer.START_ALARM"
+        const val ACTION_START = "com.buzzerapp.START_SERVICE"
+        const val ACTION_STOP = "com.buzzerapp.STOP_SERVICE"
+        const val ACTION_STOP_ALARM = "com.buzzerapp.STOP_ALARM"
+        const val ACTION_RESPOND = "com.buzzerapp.RESPOND"
+        const val ACTION_SHOW_BUZZ = "com.buzzerapp.SHOW_BUZZ"
+        const val ACTION_START_ALARM = "com.buzzerapp.START_ALARM"
         const val EXTRA_USER_ID = "user_id"
         const val EXTRA_BUZZ_ID = "buzz_id"
         const val EXTRA_RESPONSE = "response"

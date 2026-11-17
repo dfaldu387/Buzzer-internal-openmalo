@@ -1,4 +1,4 @@
-package com.openmalobuzzer
+package com.buzzerapp
 
 import android.content.Intent
 import android.media.MediaRecorder

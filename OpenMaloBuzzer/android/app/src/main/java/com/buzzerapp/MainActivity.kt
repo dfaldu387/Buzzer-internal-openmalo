@@ -1,4 +1,4 @@
-package com.openmalobuzzer
+package com.buzzerapp
 
 import android.content.Intent
 import android.os.Bundle
@@ -16,7 +16,7 @@ class MainActivity : ReactActivity() {
     var pendingNavigation: String? = null
   }
 
-  override fun getMainComponentName(): String = "OpenMaloBuzzer"
+  override fun getMainComponentName(): String = "Buzzer"
 
   override fun createReactActivityDelegate(): ReactActivityDelegate =
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)

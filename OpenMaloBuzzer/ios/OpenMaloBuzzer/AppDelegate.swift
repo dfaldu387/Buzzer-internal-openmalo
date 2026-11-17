@@ -30,7 +30,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // This replaces the deprecated setMinimumBackgroundFetchInterval API.
     // iOS decides when to run it (typically every few hours for active apps).
     BGTaskScheduler.shared.register(
-      forTaskWithIdentifier: "com.openmalobuzzer.token-refresh",
+      forTaskWithIdentifier: "com.buzzerapp.token-refresh",
       using: nil
     ) { task in
       Self.handleTokenRefreshTask(task as! BGAppRefreshTask)
@@ -50,7 +50,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     if #unavailable(iOS 17) {
       window = UIWindow(frame: UIScreen.main.bounds)
       factory.startReactNative(
-        withModuleName: "OpenMaloBuzzer",
+        withModuleName: "Buzzer",
         in: window,
         launchOptions: launchOptions
       )
@@ -88,7 +88,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   /// iOS decides the actual execution time based on usage patterns.
   static func scheduleTokenRefresh() {
     let request = BGAppRefreshTaskRequest(
-      identifier: "com.openmalobuzzer.token-refresh"
+      identifier: "com.buzzerapp.token-refresh"
     )
     // Ask iOS to run no earlier than 1 hour from now.
     // iOS may delay further based on battery, usage patterns, etc.
@@ -229,7 +229,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     let window = UIWindow(windowScene: windowScene)
     appDelegate.reactNativeFactory?.startReactNative(
-      withModuleName: "OpenMaloBuzzer",
+      withModuleName: "Buzzer",
       in: window,
       launchOptions: nil
     )

@@ -184,7 +184,7 @@ export function verifyPin(pin: string, storedHash: string): boolean {
       hash = sha256(`${salt}:${hash}`);
     }
     if (parts[2] === hash) return true;
-    // Legacy v2 salt (for users who hashed with the old salt)
+    // Legacy v2 salt (for users who hashed before the rename)
     hash = sha256(`${salt}:${pin}:openmalo_buzzer_v2`);
     for (let i = 0; i < 1000; i++) {
       hash = sha256(`${salt}:${hash}`);

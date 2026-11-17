@@ -1,4 +1,4 @@
-package com.openmalobuzzer
+package com.buzzerapp
 
 object SupabaseConfig {
     val URL: String = BuildConfig.SUPABASE_URL

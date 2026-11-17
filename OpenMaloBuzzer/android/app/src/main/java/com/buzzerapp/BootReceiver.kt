@@ -1,4 +1,4 @@
-package com.openmalobuzzer
+package com.buzzerapp
 
 import android.app.ForegroundServiceStartNotAllowedException
 import android.content.BroadcastReceiver
