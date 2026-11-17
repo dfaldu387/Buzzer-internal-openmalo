@@ -114,14 +114,14 @@ export const useAuth = () => {
     return () => { if (interval) clearInterval(interval); sub.remove(); };
   }, [user]);
 
-  const login = useCallback(async (phone: string, pin: string) => {
-    const u = await authLogin(phone, pin);
+  const login = useCallback(async (phone: string, pin: string, tenantCode?: string) => {
+    const u = await authLogin(phone, pin, tenantCode);
     if (u) setUser(u);
     return u;
   }, []);
 
-  const signUp = useCallback(async (name: string, phone: string, pin: string, role: 'manager' | 'member' = 'member') => {
-    const u = await authSignup(name, phone, pin, role);
+  const signUp = useCallback(async (name: string, phone: string, pin: string, role: 'manager' | 'member' = 'member', tenantCode?: string) => {
+    const u = await authSignup(name, phone, pin, role, tenantCode);
     setUser(u);
     return u;
   }, []);

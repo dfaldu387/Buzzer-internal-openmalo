@@ -1,10 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SUPABASE_URL, SUPABASE_ANON_KEY} from '@env';
 import {supabase} from './supabase';
-import {User, Buzz, Reason, BuzzResponse, Group, CallLog, VoiceMail} from '../types';
+import {User, Buzz, Reason, BuzzResponse, Group, CallLog, VoiceMail, Tenant} from '../types';
 
 let channelId = 0;
 const uid = () => `ch_${++channelId}_${Date.now()}`;
+
+// ─── Tenants ──────────────────────────────────────────
+export const getTenantByCode = async (code: string): Promise<Tenant | null> => {
+  const {data} = await supabase
+    .from('tenants').select('*').eq('code', code.toUpperCase()).eq('is_active', true).maybeSingle();
+  return data ? (data as Tenant) : null;
+};
 
 /** Safely convert created_at to epoch ms — handles both raw numbers and ISO strings. */
 const toEpochMs = (v: any): number => {
@@ -23,14 +30,17 @@ export const getUserName = async (userId: string): Promise<string> => {
   return 'User';
 };
 
-export const getUsers = async () => {
-  const {data} = await supabase.from('users').select('*').eq('is_active', true);
+export const getUsers = async (tenantId?: string) => {
+  let query = supabase.from('users').select('*').eq('is_active', true);
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+  const {data} = await query;
   return (data || []) as User[];
 };
 
-export const getUserByPhone = async (phone: string): Promise<User | null> => {
-  const {data} = await supabase
-    .from('users').select('*').eq('phone', phone).eq('is_active', true).limit(1).maybeSingle();
+export const getUserByPhone = async (phone: string, tenantId?: string): Promise<User | null> => {
+  let query = supabase.from('users').select('*').eq('phone', phone).eq('is_active', true);
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+  const {data} = await query.limit(1).maybeSingle();
   return data ? (data as User) : null;
 };
 
@@ -90,18 +100,19 @@ export const updateUserRole = async (userId: string, role: string) => {
   await supabase.from('users').update({role}).eq('id', userId);
 };
 
-export const subscribeToUsers = (callback: (users: User[]) => void) => {
-  // Initial fetch
-  supabase.from('users').select('*').eq('is_active', true).then(({data}) => {
-    if (data) callback(data as User[]);
-  });
+export const subscribeToUsers = (callback: (users: User[]) => void, tenantId?: string) => {
+  const fetchUsers = () => {
+    let query = supabase.from('users').select('*').eq('is_active', true);
+    if (tenantId) query = query.eq('tenant_id', tenantId);
+    query.then(({data}) => { if (data) callback(data as User[]); });
+  };
+
+  fetchUsers();
 
   const channel = supabase
     .channel(uid())
     .on('postgres_changes', {event: '*', schema: 'public', table: 'users'}, () => {
-      supabase.from('users').select('*').eq('is_active', true).then(({data}) => {
-        if (data) callback(data as User[]);
-      });
+      fetchUsers();
     })
     .subscribe();
 
@@ -229,25 +240,27 @@ export const getReasons = async () => {
   return (data || []) as Reason[];
 };
 
-export const subscribeToReasons = (callback: (reasons: Reason[]) => void) => {
-  supabase.from('reasons').select('*').eq('is_active', true).order('sort_order').then(({data}) => {
-    if (data) callback(data as Reason[]);
-  });
+export const subscribeToReasons = (callback: (reasons: Reason[]) => void, tenantId?: string) => {
+  const fetchReasons = () => {
+    let query = supabase.from('reasons').select('*').eq('is_active', true);
+    if (tenantId) query = query.eq('tenant_id', tenantId);
+    query.order('sort_order').then(({data}) => { if (data) callback(data as Reason[]); });
+  };
+
+  fetchReasons();
 
   const channel = supabase
     .channel(uid())
     .on('postgres_changes', {event: '*', schema: 'public', table: 'reasons'}, () => {
-      supabase.from('reasons').select('*').eq('is_active', true).order('sort_order').then(({data}) => {
-        if (data) callback(data as Reason[]);
-      });
+      fetchReasons();
     })
     .subscribe();
 
   return () => { supabase.removeChannel(channel); };
 };
 
-export const addReason = async (label: string, sortOrder: number) => {
-  await supabase.from('reasons').insert({label, sort_order: sortOrder, is_active: true});
+export const addReason = async (label: string, sortOrder: number, tenantId?: string) => {
+  await supabase.from('reasons').insert({label, sort_order: sortOrder, is_active: true, ...(tenantId ? {tenant_id: tenantId} : {})});
 };
 
 export const removeReason = async (reasonId: string) => {
@@ -357,17 +370,19 @@ export const subscribeToMissedBuzzes = (
 };
 
 // ─── Groups ─────────────────────────────────────────────
-export const subscribeToGroups = (callback: (groups: Group[]) => void) => {
-  supabase.from('groups').select('*').eq('is_active', true).then(({data}) => {
-    if (data) callback(data as Group[]);
-  });
+export const subscribeToGroups = (callback: (groups: Group[]) => void, tenantId?: string) => {
+  const fetchGroups = () => {
+    let query = supabase.from('groups').select('*').eq('is_active', true);
+    if (tenantId) query = query.eq('tenant_id', tenantId);
+    query.then(({data}) => { if (data) callback(data as Group[]); });
+  };
+
+  fetchGroups();
 
   const channel = supabase
     .channel(uid())
     .on('postgres_changes', {event: '*', schema: 'public', table: 'groups'}, () => {
-      supabase.from('groups').select('*').eq('is_active', true).then(({data}) => {
-        if (data) callback(data as Group[]);
-      });
+      fetchGroups();
     })
     .subscribe();
 

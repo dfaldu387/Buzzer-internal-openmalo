@@ -2,6 +2,14 @@ export type UserRole = 'owner' | 'manager' | 'member';
 
 export type BuzzResponse = 'ack' | 'five_min' | 'busy' | 'cancelled' | 'dismissed' | 'none';
 
+export interface Tenant {
+  id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
+  created_at: number;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -10,6 +18,7 @@ export interface User {
   role: UserRole;
   last_seen_at: number;
   is_active: boolean;
+  tenant_id: string;
 }
 
 export interface Buzz {
@@ -42,6 +51,7 @@ export interface Group {
   created_by: string;
   created_at: number;
   is_active: boolean;
+  tenant_id?: string;
 }
 
 export interface CallLog {

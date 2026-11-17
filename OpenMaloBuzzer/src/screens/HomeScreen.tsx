@@ -51,9 +51,9 @@ interface Props {
 }
 
 const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, onEditBuzz, onCallUser, onVoiceMail, onSettings, onProfile, onHistory, onGroups, onBuzzGroup, onEditGroup, initialTab}) => {
-  const {users, isOnline, loading} = useUsers(currentUser.id);
-  const {groups} = useGroups();
-  const reasons = useReasons();
+  const {users, isOnline, loading} = useUsers(currentUser.id, currentUser.tenant_id);
+  const {groups} = useGroups(currentUser.tenant_id);
+  const reasons = useReasons(currentUser.tenant_id);
   const [favorites, setFavorites] = useState<FavoriteEntry[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(true);
   const [unreadVoiceCount, setUnreadVoiceCount] = useState(0);

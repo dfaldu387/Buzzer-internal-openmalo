@@ -20,11 +20,12 @@ import {User} from '../types';
 const BASE_WIDTH = 375;
 
 interface Props {
-  onSignup: (name: string, phone: string, pin: string, role: 'manager' | 'member') => Promise<User>;
+  onSignup: (name: string, phone: string, pin: string, role: 'manager' | 'member', tenantCode?: string) => Promise<User>;
   onGoToLogin: () => void;
 }
 
 const SignupScreen: React.FC<Props> = ({onSignup, onGoToLogin}) => {
+  const [companyCode, setCompanyCode] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
@@ -64,12 +65,19 @@ const SignupScreen: React.FC<Props> = ({onSignup, onGoToLogin}) => {
   }, []);
 
   const isFormValid =
+    companyCode.trim().length > 0 &&
     name.trim().length >= 2 &&
     phone.length >= 10 &&
     pin.length === 4 &&
     confirmPin.length === 4;
 
+  const nameRef = useRef<TextInput>(null);
+
   const handleSignup = async () => {
+    if (!companyCode.trim()) {
+      setAlertModal({visible: true, title: 'Error', message: 'Enter your company code'});
+      return;
+    }
     if (!name.trim()) {
       setAlertModal({visible: true, title: 'Error', message: 'Enter your name'});
       return;
@@ -89,7 +97,7 @@ const SignupScreen: React.FC<Props> = ({onSignup, onGoToLogin}) => {
 
     setLoading(true);
     try {
-      await onSignup(name.trim(), phone, pin, role);
+      await onSignup(name.trim(), phone, pin, role, companyCode.trim());
     } catch (e: any) {
       setAlertModal({visible: true, title: 'Error', message: e?.message || 'Something went wrong. Try again.'});
     } finally {
@@ -136,6 +144,23 @@ const SignupScreen: React.FC<Props> = ({onSignup, onGoToLogin}) => {
       </Text>
 
       <TextInput
+        style={[
+          styles.input,
+          {fontSize: 16 * scale, paddingVertical: 14 * scale},
+        ]}
+        placeholder="Company Code (e.g. ACME)"
+        placeholderTextColor="#999"
+        autoCapitalize="characters"
+        autoCorrect={false}
+        value={companyCode}
+        onChangeText={t => setCompanyCode(t.replace(/[^A-Za-z0-9]/g, '').toUpperCase())}
+        maxLength={20}
+        returnKeyType="next"
+        onSubmitEditing={() => nameRef.current?.focus()}
+      />
+
+      <TextInput
+        ref={nameRef}
         style={[
           styles.input,
           {fontSize: 16 * scale, paddingVertical: 14 * scale},

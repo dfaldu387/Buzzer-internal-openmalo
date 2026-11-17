@@ -21,21 +21,26 @@ import {User} from '../types';
 const BASE_WIDTH = 375;
 
 interface Props {
-  onLogin: (phone: string, pin: string) => Promise<User | null>;
+  onLogin: (phone: string, pin: string, tenantCode?: string) => Promise<User | null>;
   onGoToSignup: () => void;
 }
 
 const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
+  const [companyCode, setCompanyCode] = useState('');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Restore last used phone number
+  // Restore last used phone number and company code
   useEffect(() => {
     AsyncStorage.getItem('@openmalo_last_phone').then(saved => {
       if (saved) setPhone(saved);
     });
+    AsyncStorage.getItem('@openmalo_tenant').then(saved => {
+      if (saved) setCompanyCode(saved);
+    });
   }, []);
+  const phoneRef = useRef<TextInput>(null);
   const pinRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const {width, height} = useWindowDimensions();
@@ -67,6 +72,10 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
   }, []);
 
   const handleLogin = async () => {
+    if (!companyCode.trim()) {
+      setAlertModal({visible: true, title: 'Error', message: 'Enter your company code'});
+      return;
+    }
     if (phone.length < 10) {
       setAlertModal({visible: true, title: 'Error', message: 'Enter a valid phone number'});
       return;
@@ -78,7 +87,7 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
 
     setLoading(true);
     try {
-      const user = await onLogin(phone, pin);
+      const user = await onLogin(phone, pin, companyCode.trim());
       if (user) {
         AsyncStorage.setItem('@openmalo_last_phone', phone).catch(() => {});
       }
@@ -139,6 +148,23 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
           style={[
             styles.input,
             {fontSize: 16 * scale, paddingVertical: 14 * scale},
+          ]}
+          placeholder="Company Code (e.g. ACME)"
+          placeholderTextColor="#999"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          value={companyCode}
+          onChangeText={t => setCompanyCode(t.replace(/[^A-Za-z0-9]/g, '').toUpperCase())}
+          maxLength={20}
+          returnKeyType="next"
+          onSubmitEditing={() => phoneRef.current?.focus()}
+        />
+
+        <TextInput
+          ref={phoneRef}
+          style={[
+            styles.input,
+            {fontSize: 16 * scale, paddingVertical: 14 * scale},
             phone.length > 0 && phone.length < 10 && {borderColor: '#F44336'},
           ]}
           placeholder="Phone number (min 10 digits)"
@@ -175,7 +201,7 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
           style={[
             styles.button,
             {paddingVertical: 16 * scale},
-            (loading || phone.length < 10 || pin.length !== 4) &&
+            (loading || !companyCode.trim() || phone.length < 10 || pin.length !== 4) &&
               styles.buttonDisabled,
           ]}
           onPress={handleLogin}

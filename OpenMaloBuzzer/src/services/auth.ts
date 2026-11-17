@@ -1,21 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Platform} from 'react-native';
 import {User} from '../types';
-import {getUserByPhone, addUser, removeUser, removeInactiveByPhone, updateFcmToken, updateUserProfile, resetUserPin, updateOwnPin} from './firebase';
+import {getUserByPhone, addUser, removeUser, removeInactiveByPhone, updateFcmToken, updateUserProfile, resetUserPin, updateOwnPin, getTenantByCode} from './firebase';
 import {hashPin, verifyPin} from './crypto';
 import {clearUserCache} from '../hooks/useUsers';
 import {clearReasonCache} from '../hooks/useReasons';
 import {clearGroupCache} from '../hooks/useGroups';
 
 const AUTH_KEY = '@openmalo_user';
+const TENANT_KEY = '@openmalo_tenant';
 
 const storeUser = async (user: User) => {
   const {pin_hash: _, ...safeUser} = user;
   await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(safeUser));
 };
 
-export const login = async (phone: string, pin: string): Promise<User | null> => {
-  const user = await getUserByPhone(phone);
+export const storeTenantCode = async (code: string) => {
+  await AsyncStorage.setItem(TENANT_KEY, code.toUpperCase());
+};
+
+export const getStoredTenantCode = async (): Promise<string | null> => {
+  return AsyncStorage.getItem(TENANT_KEY);
+};
+
+export const login = async (phone: string, pin: string, tenantCode?: string): Promise<User | null> => {
+  let tenantId: string | undefined;
+  if (tenantCode) {
+    const tenant = await getTenantByCode(tenantCode);
+    if (!tenant) throw new Error('Invalid company code');
+    tenantId = tenant.id;
+    await storeTenantCode(tenantCode);
+  }
+
+  const user = await getUserByPhone(phone, tenantId);
   if (!user) throw new Error('No account found with this phone number');
   if (!verifyPin(pin, user.pin_hash)) throw new Error('Incorrect PIN');
 
@@ -52,16 +69,22 @@ export const signup = async (
   phone: string,
   pin: string,
   role: 'manager' | 'member' = 'member',
+  tenantCode?: string,
 ): Promise<User> => {
-  const existing = await getUserByPhone(phone);
+  let tenantId: string | undefined;
+  if (tenantCode) {
+    const tenant = await getTenantByCode(tenantCode);
+    if (!tenant) throw new Error('Invalid company code');
+    tenantId = tenant.id;
+    await storeTenantCode(tenantCode);
+  }
+
+  const existing = await getUserByPhone(phone, tenantId);
   if (existing) throw new Error('Phone number already registered');
 
   // Remove any inactive user with same phone (soft-deleted accounts)
   await removeInactiveByPhone(phone);
 
-  // Signup inserts via anon key — the DB trigger allows INSERT and member role.
-  // NOTE: Only 'member' role works here. Admin user creation goes through
-  // the admin-action Edge Function (adminAddUser).
   const {hashPin} = require('./crypto');
   const userData: Omit<User, 'id'> = {
     name: name.trim(),
@@ -70,6 +93,7 @@ export const signup = async (
     role,
     last_seen_at: Date.now(),
     is_active: true,
+    tenant_id: tenantId || '',
   };
 
   const docRef = await addUser(userData);
@@ -100,13 +124,10 @@ export const getStoredUser = async (): Promise<User | null> => {
   const data = await AsyncStorage.getItem(AUTH_KEY);
   if (!data) return null;
   const parsed = JSON.parse(data);
-  // pin_hash is intentionally stripped during storage for security.
-  // Set a sentinel value so code doesn't accidentally use it for verification.
   return {...parsed, pin_hash: '__stored_locally__'};
 };
 
 export const logout = async () => {
-  // Clear FCM token from server so logged-out user doesn't receive ghost pushes
   try {
     const data = await AsyncStorage.getItem(AUTH_KEY);
     if (data) {
@@ -118,7 +139,6 @@ export const logout = async () => {
     }
   } catch {}
   await AsyncStorage.removeItem(AUTH_KEY);
-  // Clear module-level caches to prevent data leaking between user sessions
   clearUserCache();
   clearReasonCache();
   clearGroupCache();
@@ -129,7 +149,7 @@ export const updateProfile = async (
   data: {name?: string; phone?: string},
 ): Promise<User> => {
   if (data.phone && data.phone !== user.phone) {
-    const existing = await getUserByPhone(data.phone);
+    const existing = await getUserByPhone(data.phone, user.tenant_id);
     if (existing) throw new Error('Phone number already in use');
   }
   await updateUserProfile(user.id, data);
@@ -143,16 +163,13 @@ export const changePin = async (
   currentPin: string,
   newPin: string,
 ): Promise<void> => {
-  // Try Edge Function first (server-side verification). Fall back to direct
-  // Supabase if the Edge Function isn't deployed yet.
   try {
     await updateOwnPin(user.id, currentPin, newPin);
     return;
   } catch (e: any) {
     if (!e?.message?.includes('404')) throw e;
   }
-  // Fallback: verify locally, update directly
-  const freshUser = await getUserByPhone(user.phone);
+  const freshUser = await getUserByPhone(user.phone, user.tenant_id);
   if (!freshUser) throw new Error('User not found');
   if (!verifyPin(currentPin, freshUser.pin_hash)) throw new Error('Current PIN is incorrect');
   await resetUserPin(user.id, hashPin(newPin));

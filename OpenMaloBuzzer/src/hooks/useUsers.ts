@@ -9,7 +9,7 @@ let cachedUsers: User[] | null = null;
 /** Clear the module-level cache. Must be called on logout to prevent data leaking between sessions. */
 export const clearUserCache = () => { cachedUsers = null; };
 
-export const useUsers = (currentUserId: string | undefined) => {
+export const useUsers = (currentUserId: string | undefined, tenantId?: string) => {
   const [users, setUsers] = useState<User[]>(
     cachedUsers
       ? cachedUsers.filter(u => u.id !== currentUserId).sort((a, b) => a.name.localeCompare(b.name))
@@ -26,9 +26,9 @@ export const useUsers = (currentUserId: string | undefined) => {
           .sort((a, b) => a.name.localeCompare(b.name)),
       );
       setLoading(false);
-    });
+    }, tenantId);
     return unsubscribe;
-  }, [currentUserId]);
+  }, [currentUserId, tenantId]);
 
   const isOnline = (user: User) =>
     Date.now() - user.last_seen_at < PRESENCE_TIMEOUT_MS;

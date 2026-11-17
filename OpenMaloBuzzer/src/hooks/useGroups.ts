@@ -7,7 +7,7 @@ let cachedGroups: Group[] | null = null;
 /** Clear the module-level cache. Must be called on logout to prevent data leaking between sessions. */
 export const clearGroupCache = () => { cachedGroups = null; };
 
-export const useGroups = () => {
+export const useGroups = (tenantId?: string) => {
   const [groups, setGroups] = useState<Group[]>(cachedGroups || []);
   const [loading, setLoading] = useState(cachedGroups === null);
 
@@ -16,9 +16,9 @@ export const useGroups = () => {
       cachedGroups = g;
       setGroups(g);
       setLoading(false);
-    });
+    }, tenantId);
     return unsubscribe;
-  }, []);
+  }, [tenantId]);
 
   return {groups, loading};
 };
