@@ -13,7 +13,7 @@ const db = getFirestore(app);
 
 function hashPin(pin) {
   let hash = 0;
-  const str = `openmalo_${pin}_salt`;
+  const str = `buzzer_${pin}_salt`;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = (hash << 5) - hash + char;

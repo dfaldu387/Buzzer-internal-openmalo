@@ -17,7 +17,7 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
-target 'OpenMaloBuzzer' do
+target 'Buzzer' do
   config = use_native_modules!
 
   use_react_native!(
@@ -42,7 +42,7 @@ target 'OpenMaloBuzzer' do
     end
     # Link AVFoundation for react-native-sound
     installer.pods_project.targets.each do |target|
-      if target.name == 'OpenMaloBuzzer'
+      if target.name == 'Buzzer'
         target.build_configurations.each do |bc|
           bc.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
           bc.build_settings['OTHER_LDFLAGS'] |= ['-framework', 'AVFoundation', '-framework', 'AudioToolbox']

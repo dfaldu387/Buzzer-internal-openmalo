@@ -197,7 +197,7 @@ function generateWhistle() {
 
 // Output dirs
 const androidRaw = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'res', 'raw');
-const iosDir = path.join(__dirname, '..', 'ios', 'OpenMaloBuzzer');
+const iosDir = path.join(__dirname, '..', 'ios', 'Buzzer');
 
 const sounds = [
   { name: 'buzz_alarm_2', gen: generateUrgent },

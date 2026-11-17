@@ -1,4 +1,4 @@
-# OpenMalo Buzzer — Setup Guide
+# Buzzer — Setup Guide
 
 ## Prerequisites
 - Node.js 18+
@@ -10,13 +10,13 @@
 
 ### Create Firebase Project
 1. Go to [Firebase Console](https://console.firebase.google.com)
-2. Create a new project called "OpenMalo Buzzer"
+2. Create a new project called "Buzzer"
 3. Enable **Firestore Database** (start in test mode)
 4. Enable **Cloud Messaging (FCM)**
 
 ### Add Android App
 1. In Firebase Console → Project Settings → Add App → Android
-2. Package name: `com.openmalobuzzer`
+2. Package name: `com.buzzerapp`
 3. Download `google-services.json`
 4. Place it in: `android/app/google-services.json`
 
@@ -68,9 +68,9 @@ android/app/src/main/res/raw/buzz_alarm.mp3
 The app prompts users on first launch to disable battery optimization.
 For Xiaomi/Redmi/Vivo/Oppo/Realme, users must also:
 
-1. Go to Settings → Apps → OpenMalo Buzzer → Battery → Unrestricted
-2. On MIUI: Settings → Battery → App Battery Saver → OpenMalo → No Restrictions
-3. On Vivo/Oppo: Settings → Battery → High Power Consumption → Enable for OpenMalo
+1. Go to Settings → Apps → Buzzer → Battery → Unrestricted
+2. On MIUI: Settings → Battery → App Battery Saver → Buzzer → No Restrictions
+3. On Vivo/Oppo: Settings → Battery → High Power Consumption → Enable for Buzzer
 
 ## 5. Testing Checklist
 
@@ -87,7 +87,7 @@ Test on: Xiaomi/Redmi, Samsung, Realme/Vivo
 ## Project Structure
 
 ```
-OpenMaloBuzzer/
+Buzzer/
 ├── App.tsx                      # Main app entry + screen routing
 ├── index.js                     # RN registration + background handlers
 ├── src/

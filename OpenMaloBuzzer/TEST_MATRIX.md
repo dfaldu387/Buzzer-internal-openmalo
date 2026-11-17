@@ -1,16 +1,16 @@
-# OpenMalo Buzzer — App State & Dormancy Test Matrix
+# Buzzer — App State & Dormancy Test Matrix
 
 ## App-Specific Assumptions (derived from codebase audit)
 
 | Subsystem | Implementation detail relevant to testing |
 |---|---|
-| **Auth** | Phone+PIN login. User JSON stored in AsyncStorage (`@openmalo_user`). Supabase client uses `persistSession: false` / `autoRefreshToken: false` — there is **no session token or JWT that expires**. The Supabase anon key is hard-coded. Auth is effectively permanent once stored. |
+| **Auth** | Phone+PIN login. User JSON stored in AsyncStorage (`@buzzer_user`). Supabase client uses `persistSession: false` / `autoRefreshToken: false` — there is **no session token or JWT that expires**. The Supabase anon key is hard-coded. Auth is effectively permanent once stored. |
 | **FCM push** | FCM token saved in `user_tokens` table. Refreshed on every foreground resume (`useAuth`), on token rotation (`onTokenRefresh`), and every 1 h by `BuzzerService`. A `TokenRefreshWorker` (WorkManager, every 6 h) is the last-resort background refresh. |
 | **Polling** | Android `BuzzerService` polls Supabase REST every 10 s for pending buzzes. This is the fallback when FCM doesn't arrive. |
 | **Service lifecycle** | `BuzzerService` is `START_STICKY`, `stopWithTask=false`. On task-removed or destroy it schedules an `AlarmManager` restart. `BootReceiver` restarts it after reboot. |
 | **Realtime** | Supabase Realtime websocket for live buzz subscription (foreground only). |
 | **Local cache** | Module-level caches in `useUsers`, `useReasons`, `useGroups` hooks — survive navigating between screens but **not** process death. |
-| **Notification channels** | `openmalo_buzz_visual` (heads-up, no sound), `openmalo_buzz` (alarm sound for notifee fallback), `openmalo_voicemail`. Created by `BuzzerService.onCreate()`. |
+| **Notification channels** | `buzzer_visual` (heads-up, no sound), `buzzer_alerts` (alarm sound for notifee fallback), `buzzer_voicemail`. Created by `BuzzerService.onCreate()`. |
 | **Dedup** | `seenBuzzIds` persisted to SharedPreferences; cleaned up after 5 min. |
 
 ---
@@ -56,7 +56,7 @@
 | ID | Test Case | Precondition | Steps | Expected Result | Pass/Fail Criteria | Priority | Platform Note |
 |---|---|---|---|---|---|---|---|
 | KL-01 | Force-stop then receive buzz | Settings → Force Stop app | Sender sends buzz | **Android: FCM will NOT be delivered** (platform restriction). Buzz missed until user manually reopens app. **iOS: APNs still delivers** the notification. | Android: EXPECTED FAILURE — document as known limitation. iOS: notification shown | P0 | This is a known Android platform limitation. Cannot be fixed. |
-| KL-02 | OS kills app for memory | Low-memory kill while backgrounded | Simulate via `adb shell am kill com.openmalobuzzer` | 1. BuzzerService.onDestroy schedules AlarmManager restart  2. Service restarts  3. FCM background handler still registered | Service self-heals within 60 s | P0 | Android: AlarmManager + START_STICKY. iOS: no equivalent, relies on APNs |
+| KL-02 | OS kills app for memory | Low-memory kill while backgrounded | Simulate via `adb shell am kill com.buzzerapp` | 1. BuzzerService.onDestroy schedules AlarmManager restart  2. Service restarts  3. FCM background handler still registered | Service self-heals within 60 s | P0 | Android: AlarmManager + START_STICKY. iOS: no equivalent, relies on APNs |
 | KL-03 | Cold start after kill — pending buzz exists | App was killed, unresponded buzz exists in DB | User opens app manually | 1. App loads  2. `getPendingBuzz()` checks for pending buzzes  3. IncomingBuzzScreen shows if buzz < 2 min old | Pending buzz shown on launch | P1 | — |
 | KL-04 | Cold start — auth restoration | App killed, user was logged in | Open app | `getStoredUser()` reads AsyncStorage → user restored without re-login | No login screen shown | P0 | AsyncStorage survives process death on both platforms |
 | KL-05 | Cold start — BuzzerService recovery | App killed, then reopened | Open app | `BuzzerService.startService(userId)` called from App.tsx useEffect. Polling and FCM token refresh resume. | Service running, heartbeat updating | P1 | — |
@@ -134,7 +134,7 @@
 | EC-07 | Duplicate FCM delivery | FCM delivers same message twice | Receive same buzz_id twice | `isBuzzSeen()` returns true on second delivery → no duplicate alarm or notification | P1 | Both |
 | EC-08 | BuzzerService crash loop | Service crashes repeatedly | Service restarts via AlarmManager with exponential backoff (3s, 10s, 30s, 60s) | Restart attempts cap at 60 s delay. No device battery drain from tight loop. | P1 | Android |
 | EC-09 | Notification permission revoked | User revoked POST_NOTIFICATIONS in Settings | Receive buzz | Android: alarm still plays (MediaPlayer doesn't need notification permission), but no visual notification. User confused. | P1 | Android 13+ |
-| EC-10 | Full-screen intent permission revoked | Android 14+ can revoke USE_FULL_SCREEN_INTENT | Receive buzz while screen locked | Full-screen intent degrades to heads-up (which works on `openmalo_buzz_visual` channel) | P1 | Android 14+ |
+| EC-10 | Full-screen intent permission revoked | Android 14+ can revoke USE_FULL_SCREEN_INTENT | Receive buzz while screen locked | Full-screen intent degrades to heads-up (which works on `buzzer_visual` channel) | P1 | Android 14+ |
 
 ---
 
@@ -171,7 +171,7 @@ Rows = app state when buzz is sent. Columns = time since last app open.
 |---|---|---|
 | Foreground | App visibly open | App visibly open |
 | Background | Press Home or switch apps | Press Home or switch apps |
-| Killed — OS | `adb shell am kill com.openmalobuzzer` | Xcode → Debug → Simulate Memory Warning, then background |
+| Killed — OS | `adb shell am kill com.buzzerapp` | Xcode → Debug → Simulate Memory Warning, then background |
 | Killed — Force Stop | Settings → Apps → Force Stop | Swipe up from app switcher |
 | Killed — after reboot | `adb reboot` | Power off/on |
 
@@ -181,7 +181,7 @@ Rows = app state when buzz is sent. Columns = time since last app open.
 |---|---|
 | 1 day | Set device clock forward 24 h. Or: actually wait 24 h with device idle on a shelf. |
 | 1 week | Set clock forward 7 days. Verify FCM token age via `adb logcat -s BuzzerService TokenRefreshWorker`. |
-| 1 month | Set clock forward 30 days. On Android 12+, also run: `adb shell cmd app_hibernation set-state com.openmalobuzzer true` to simulate hibernation. |
+| 1 month | Set clock forward 30 days. On Android 12+, also run: `adb shell cmd app_hibernation set-state com.buzzerapp true` to simulate hibernation. |
 | 1 year | Set clock forward 365 days. Revoke permissions manually. Clear FCM token from Supabase `user_tokens` to simulate expiry. |
 | Long-term | Combine 1-year simulation with: Supabase schema change, API key rotation, OS upgrade (test on next major version emulator). |
 
@@ -189,25 +189,25 @@ Rows = app state when buzz is sent. Columns = time since last app open.
 
 ```bash
 # Check BuzzerService health
-adb shell dumpsys activity services com.openmalobuzzer/.BuzzerService
+adb shell dumpsys activity services com.buzzerapp/.BuzzerService
 
 # Check SharedPreferences
-adb shell run-as com.openmalobuzzer cat /data/data/com.openmalobuzzer/shared_prefs/buzzer_prefs.xml
+adb shell run-as com.buzzerapp cat /data/data/com.buzzerapp/shared_prefs/buzzer_prefs.xml
 
 # Check WorkManager jobs
-adb shell dumpsys jobscheduler | grep -A 5 openmalobuzzer
+adb shell dumpsys jobscheduler | grep -A 5 buzzerapp
 
 # Check notification channels
 adb shell dumpsys notification | grep -A 3 openmalo
 
 # Check battery optimization status
-adb shell dumpsys deviceidle whitelist | grep openmalobuzzer
+adb shell dumpsys deviceidle whitelist | grep buzzerapp
 
 # Check if app is hibernated (Android 12+)
-adb shell cmd app_hibernation get-state com.openmalobuzzer
+adb shell cmd app_hibernation get-state com.buzzerapp
 
 # Simulate low memory kill
-adb shell am kill com.openmalobuzzer
+adb shell am kill com.buzzerapp
 
 # Check FCM token staleness (via Logcat)
 adb logcat -s BuzzerService:D TokenRefreshWorker:D | grep -i token

@@ -215,7 +215,8 @@
       "Bash(grep -rn --include=*.json --include=*.plist --include=*.xml -i openmalo /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/)",
       "Bash(grep -rn --include=*.json --include=*.plist --include=*.xml --include=*.swift --include=*.gradle --include=*.pro --include=*.kt -i openmalo /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/)",
       "Bash(grep -rn -i openmalo /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/ --include=*.ts --include=*.tsx --include=*.kt --include=*.swift --include=*.m --include=*.json --include=*.xml --include=*.sql --include=*.plist --include=*.gradle --include=*.pro --include=*.toml)",
-      "Bash(grep -rn -i openmalo /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/ --include=*.ts --include=*.tsx --include=*.kt --include=*.swift --include=*.m --include=*.json --include=*.xml --include=*.sql --include=*.plist --include=*.gradle --include=*.pro --include=*.toml --include=*.entitlements --include=*.pbxproj --include=*.storyboard --include=*.xcscheme)"
+      "Bash(grep -rn -i openmalo /Users/admin/Desktop/Buzzer-internal-openmalo/OpenMaloBuzzer/ --include=*.ts --include=*.tsx --include=*.kt --include=*.swift --include=*.m --include=*.json --include=*.xml --include=*.sql --include=*.plist --include=*.gradle --include=*.pro --include=*.toml --include=*.entitlements --include=*.pbxproj --include=*.storyboard --include=*.xcscheme)",
+      "Bash(grep:*)"
     ]
   }
 }
