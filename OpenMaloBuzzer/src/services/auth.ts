@@ -71,6 +71,10 @@ export const signup = async (
   role: 'manager' | 'member' = 'member',
   tenantCode?: string,
 ): Promise<User> => {
+  // Check phone globally first — one phone can only exist in one company
+  const existingAnywhere = await getUserByPhone(phone);
+  if (existingAnywhere) throw new Error('This mobile number is already registered');
+
   let tenantId: string | undefined;
   if (tenantCode) {
     const tenant = await getTenantByCode(tenantCode);
@@ -78,9 +82,6 @@ export const signup = async (
     tenantId = tenant.id;
     await storeTenantCode(tenantCode);
   }
-
-  const existing = await getUserByPhone(phone, tenantId);
-  if (existing) throw new Error('Phone number already registered');
 
   // Remove any inactive user with same phone (soft-deleted accounts)
   await removeInactiveByPhone(phone, tenantId);

@@ -30,7 +30,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // This replaces the deprecated setMinimumBackgroundFetchInterval API.
     // iOS decides when to run it (typically every few hours for active apps).
     BGTaskScheduler.shared.register(
-      forTaskWithIdentifier: "com.buzzerapp.token-refresh",
+      forTaskWithIdentifier: "com.openmalobuzzer.token-refresh",
       using: nil
     ) { task in
       Self.handleTokenRefreshTask(task as! BGAppRefreshTask)
@@ -88,7 +88,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   /// iOS decides the actual execution time based on usage patterns.
   static func scheduleTokenRefresh() {
     let request = BGAppRefreshTaskRequest(
-      identifier: "com.buzzerapp.token-refresh"
+      identifier: "com.openmalobuzzer.token-refresh"
     )
     // Ask iOS to run no earlier than 1 hour from now.
     // iOS may delay further based on battery, usage patterns, etc.

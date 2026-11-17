@@ -1,4 +1,4 @@
-import React, {useState, useRef, useEffect} from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,10 @@ import {
   Modal,
   useWindowDimensions,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import {User} from '../types';
+import { User } from '../types';
 
 const BASE_WIDTH = 375;
 
@@ -25,7 +25,7 @@ interface Props {
   onGoToSignup: () => void;
 }
 
-const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
+const LoginScreen: React.FC<Props> = ({ onLogin, onGoToSignup }) => {
   const [companyCode, setCompanyCode] = useState('');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
@@ -43,12 +43,12 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
   const phoneRef = useRef<TextInput>(null);
   const pinRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const {width, height} = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const scale = Math.min(width / BASE_WIDTH, 1.3);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [alertModal, setAlertModal] = useState<{visible: boolean; title: string; message: string}>({visible: false, title: '', message: ''});
+  const [alertModal, setAlertModal] = useState<{ visible: boolean; title: string; message: string }>({ visible: false, title: '', message: '' });
 
   useEffect(() => {
     const showEvent =
@@ -59,7 +59,7 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
     const showSub = Keyboard.addListener(showEvent, e => {
       setKeyboardVisible(true);
       setKeyboardHeight(e.endCoordinates.height);
-      setTimeout(() => scrollRef.current?.scrollToEnd({animated: true}), 150);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardVisible(false);
@@ -73,15 +73,15 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
 
   const handleLogin = async () => {
     if (!companyCode.trim()) {
-      setAlertModal({visible: true, title: 'Error', message: 'Enter your company code'});
+      setAlertModal({ visible: true, title: 'Error', message: 'Enter your company code' });
       return;
     }
     if (phone.length < 10) {
-      setAlertModal({visible: true, title: 'Error', message: 'Enter a valid phone number'});
+      setAlertModal({ visible: true, title: 'Error', message: 'Enter a valid phone number' });
       return;
     }
     if (pin.length !== 4) {
-      setAlertModal({visible: true, title: 'Error', message: 'Enter your 4-digit PIN'});
+      setAlertModal({ visible: true, title: 'Error', message: 'Enter your 4-digit PIN' });
       return;
     }
 
@@ -89,10 +89,10 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
     try {
       const user = await onLogin(phone, pin, companyCode.trim());
       if (user) {
-        AsyncStorage.setItem('@buzzer_last_phone', phone).catch(() => {});
+        AsyncStorage.setItem('@buzzer_last_phone', phone).catch(() => { });
       }
     } catch (e: any) {
-      setAlertModal({visible: true, title: 'Login Failed', message: e?.message || 'Something went wrong. Try again.'});
+      setAlertModal({ visible: true, title: 'Login Failed', message: e?.message || 'Something went wrong. Try again.' });
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,7 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
 
   const bottomPadding = keyboardVisible
     ? insets.bottom +
-      (Platform.OS === 'ios' ? keyboardHeight + 20 : 40)
+    (Platform.OS === 'ios' ? keyboardHeight + 20 : 40)
     : insets.bottom + 20;
 
   return (
@@ -131,115 +131,112 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
       keyboardDismissMode="interactive"
       showsVerticalScrollIndicator={false}
       bounces={false}>
-        <Image
-          source={require('../assets/logo.png')}
-          style={[styles.logoImage, {width: 80 * scale, height: 80 * scale}]}
-        />
-        <Text style={[styles.logo, {fontSize: 36 * scale}]}>Buzzer</Text>
-        <Text
-          style={[
-            styles.subtitle,
-            {fontSize: 14 * scale, marginBottom: height * 0.05},
-          ]}>
-          Internal Communication
-        </Text>
+      <Image
+        source={require('../assets/logo.png')}
+        style={[styles.logoImage, { width: 80 * scale, height: 80 * scale }]}
+      />
+      <Text style={[styles.logo, { fontSize: 36 * scale }]}>Buzzer</Text>
+      <Text
+        style={[
+          styles.subtitle,
+          { fontSize: 14 * scale, marginBottom: height * 0.05 },
+        ]}>
+        Internal Communication
+      </Text>
 
-        <TextInput
-          style={[
-            styles.input,
-            {fontSize: 16 * scale, paddingVertical: 14 * scale},
-          ]}
-          placeholder="Company Code (e.g. ACME)"
-          placeholderTextColor="#999"
-          autoCapitalize="characters"
-          autoCorrect={false}
-          value={companyCode}
-          onChangeText={t => setCompanyCode(t.replace(/[^A-Za-z0-9]/g, '').toUpperCase())}
-          maxLength={20}
-          returnKeyType="next"
-          onSubmitEditing={() => phoneRef.current?.focus()}
-        />
+      <TextInput
+        style={[
+          styles.input,
+          { fontSize: 16 * scale, paddingVertical: 14 * scale },
+        ]}
+        placeholder="Company Code (e.g. ACME)"
+        placeholderTextColor="#999"
+        autoCapitalize="characters"
+        autoCorrect={false}
+        value={companyCode}
+        onChangeText={t => setCompanyCode(t.replace(/[^A-Za-z0-9]/g, '').toUpperCase())}
+        maxLength={20}
+        returnKeyType="next"
+        onSubmitEditing={() => phoneRef.current?.focus()}
+      />
 
-        <TextInput
-          ref={phoneRef}
-          style={[
-            styles.input,
-            {fontSize: 16 * scale, paddingVertical: 14 * scale},
-            phone.length > 0 && phone.length < 10 && {borderColor: '#F44336'},
-          ]}
-          placeholder="Phone number (min 10 digits)"
-          placeholderTextColor="#999"
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={t => setPhone(t.replace(/[^0-9]/g, ''))}
-          maxLength={15}
-          returnKeyType="next"
-          onSubmitEditing={() => pinRef.current?.focus()}
-        />
-        {phone.length > 0 && phone.length < 10 && (
-          <Text style={{color: '#F44336', fontSize: 12 * scale, marginTop: 2}}>Phone number must be at least 10 digits</Text>
+      <TextInput
+        ref={phoneRef}
+        style={[
+          styles.input,
+          { fontSize: 16 * scale, paddingVertical: 14 * scale },
+          phone.length > 0 && phone.length < 10 && { borderColor: '#F44336' },
+        ]}
+        placeholder="Phone number"
+        placeholderTextColor="#999"
+        keyboardType="phone-pad"
+        value={phone}
+        onChangeText={t => setPhone(t.replace(/[^0-9]/g, ''))}
+        maxLength={15}
+        returnKeyType="next"
+        onSubmitEditing={() => pinRef.current?.focus()}
+      />
+
+      <TextInput
+        ref={pinRef}
+        style={[
+          styles.input,
+          { fontSize: 16 * scale, paddingVertical: 14 * scale },
+        ]}
+        placeholder="4-digit PIN"
+        placeholderTextColor="#999"
+        keyboardType="number-pad"
+        secureTextEntry
+        value={pin}
+        onChangeText={setPin}
+        maxLength={4}
+        returnKeyType="done"
+        onSubmitEditing={handleLogin}
+      />
+
+      <TouchableOpacity
+        style={[
+          styles.button,
+          { paddingVertical: 16 * scale },
+          (loading || !companyCode.trim() || phone.length < 10 || pin.length !== 4) &&
+          styles.buttonDisabled,
+        ]}
+        onPress={handleLogin}
+        disabled={loading || phone.length < 10 || pin.length !== 4}
+        activeOpacity={0.8}>
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={[styles.buttonText, { fontSize: 16 * scale }]}>
+            LOGIN
+          </Text>
         )}
+      </TouchableOpacity>
 
-        <TextInput
-          ref={pinRef}
-          style={[
-            styles.input,
-            {fontSize: 16 * scale, paddingVertical: 14 * scale},
-          ]}
-          placeholder="4-digit PIN"
-          placeholderTextColor="#999"
-          keyboardType="number-pad"
-          secureTextEntry
-          value={pin}
-          onChangeText={setPin}
-          maxLength={4}
-          returnKeyType="done"
-          onSubmitEditing={handleLogin}
-        />
+      <TouchableOpacity
+        style={styles.forgotLink}
+        onPress={openForgotModal}
+        activeOpacity={0.7}>
+        <Text style={[styles.forgotText, { fontSize: 14 * scale }]}>
+          Forgot PIN?
+        </Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.button,
-            {paddingVertical: 16 * scale},
-            (loading || !companyCode.trim() || phone.length < 10 || pin.length !== 4) &&
-              styles.buttonDisabled,
-          ]}
-          onPress={handleLogin}
-          disabled={loading || phone.length < 10 || pin.length !== 4}
-          activeOpacity={0.8}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={[styles.buttonText, {fontSize: 16 * scale}]}>
-              LOGIN
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.forgotLink}
-          onPress={openForgotModal}
-          activeOpacity={0.7}>
-          <Text style={[styles.forgotText, {fontSize: 14 * scale}]}>
-            Forgot PIN?
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.signupLink}
-          onPress={onGoToSignup}
-          activeOpacity={0.7}>
-          <Text style={[styles.signupText, {fontSize: 14 * scale}]}>
-            Don't have an account?{' '}
-            <Text style={styles.signupHighlight}>Sign Up</Text>
-          </Text>
-        </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.signupLink}
+        onPress={onGoToSignup}
+        activeOpacity={0.7}>
+        <Text style={[styles.signupText, { fontSize: 14 * scale }]}>
+          Don't have an account?{' '}
+          <Text style={styles.signupHighlight}>Sign Up</Text>
+        </Text>
+      </TouchableOpacity>
 
       <Modal
         visible={alertModal.visible}
         transparent
         animationType="fade"
-        onRequestClose={() => setAlertModal(prev => ({...prev, visible: false}))}>
+        onRequestClose={() => setAlertModal(prev => ({ ...prev, visible: false }))}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <View style={styles.modalIconWrap}>
@@ -249,7 +246,7 @@ const LoginScreen: React.FC<Props> = ({onLogin, onGoToSignup}) => {
             <Text style={styles.modalMessage}>{alertModal.message}</Text>
             <TouchableOpacity
               style={styles.modalBtn}
-              onPress={() => setAlertModal(prev => ({...prev, visible: false}))}>
+              onPress={() => setAlertModal(prev => ({ ...prev, visible: false }))}>
               <Text style={styles.modalBtnText}>OK</Text>
             </TouchableOpacity>
           </View>

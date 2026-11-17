@@ -8,8 +8,10 @@ const uid = () => `ch_${++channelId}_${Date.now()}`;
 
 // ─── Tenants ──────────────────────────────────────────
 export const getTenantByCode = async (code: string): Promise<Tenant | null> => {
-  const {data} = await supabase
+  const {data, error} = await supabase
     .from('tenants').select('*').eq('code', code.toUpperCase()).eq('is_active', true).maybeSingle();
+  if (error) console.warn('getTenantByCode error:', error.message, error.details, error.hint);
+  if (!data) console.warn('getTenantByCode: no tenant found for code:', code.toUpperCase());
   return data ? (data as Tenant) : null;
 };
 
