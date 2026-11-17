@@ -55,6 +55,7 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
   const {groups} = useGroups();
   const reasons = useReasons();
   const [favorites, setFavorites] = useState<FavoriteEntry[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(true);
   const [unreadVoiceCount, setUnreadVoiceCount] = useState(0);
   const [missedBuzzes, setMissedBuzzes] = useState<Buzz[]>([]);
   const [infoGroup, setInfoGroup] = useState<Group | null>(null);
@@ -99,14 +100,27 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
   };
 
   // Load favorites from Supabase (persists across reinstall/logout)
-  useEffect(() => {
-    setFavorites([]);
+  const loadFavorites = useCallback(() => {
+    setFavoritesLoading(true);
     getFavorites(currentUser.id).then(rows => {
       setFavorites(rows.map(r => ({userId: r.target_user_id, reasons: r.reasons, reasonSounds: r.reason_sounds || {}})));
     }).catch(err => {
       console.warn('Failed to load favorites:', err?.message || JSON.stringify(err));
-    });
+    }).finally(() => setFavoritesLoading(false));
   }, [currentUser.id]);
+
+  useEffect(() => {
+    setFavorites([]);
+    loadFavorites();
+  }, [loadFavorites]);
+
+  // Refresh favorites when app comes back to foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state: string) => {
+      if (state === 'active') loadFavorites();
+    });
+    return () => sub.remove();
+  }, [loadFavorites]);
 
   const scrollToTab = useCallback((tab: 'recent' | 'people' | 'groups' | 'voice') => {
     const index = TABS.indexOf(tab);
@@ -303,20 +317,31 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
     if (!addSelectedUser || addSelectedReasons.size === 0) return;
     stopPreview();
     const reasonsArr = Array.from(addSelectedReasons);
+    // Fix 5: Only keep sound mappings for selected reasons
+    const cleanedSounds: Record<string, string> = {};
+    for (const r of reasonsArr) {
+      if (addReasonSounds[r]) cleanedSounds[r] = addReasonSounds[r];
+    }
+    const previousFavorites = favorites;
     const updated = favorites.filter(f => f.userId !== addSelectedUser.id);
-    updated.push({userId: addSelectedUser.id, reasons: reasonsArr, reasonSounds: addReasonSounds});
+    updated.push({userId: addSelectedUser.id, reasons: reasonsArr, reasonSounds: cleanedSounds});
     setFavorites(updated);
-    upsertFavorite(currentUser.id, addSelectedUser.id, reasonsArr, addReasonSounds).catch(err => {
-      console.warn('upsertFavorite failed:', err?.message || JSON.stringify(err));
-    });
     setShowAddModal(false);
+    upsertFavorite(currentUser.id, addSelectedUser.id, reasonsArr, cleanedSounds).catch(err => {
+      console.warn('upsertFavorite failed, rolling back:', err?.message || JSON.stringify(err));
+      setFavorites(previousFavorites);
+    });
   };
 
   const deleteEntry = (userId: string) => {
+    const previousFavorites = favorites;
     const updated = favorites.filter(f => f.userId !== userId);
     setFavorites(updated);
-    deleteFavorite(currentUser.id, userId).catch(() => {});
     setDeleteModal(null);
+    deleteFavorite(currentUser.id, userId).catch(err => {
+      console.warn('deleteFavorite failed, rolling back:', err?.message || JSON.stringify(err));
+      setFavorites(previousFavorites);
+    });
   };
 
   const availableForAdd = users.filter(u => canBuzz(u));
@@ -480,7 +505,9 @@ const HomeScreen: React.FC<Props> = ({currentUser, onSelectUser, onBuzzAgain, on
                 })}
               </View>
             );
-          }) : (
+          }) : favoritesLoading ? (
+            <View style={styles.center}><ActivityIndicator color="#FF4D4D" size="large" /></View>
+          ) : (
             <View style={styles.center}><Text style={styles.emptyText}>Tap + to add people and reasons</Text></View>
           )}
         </ScrollView>

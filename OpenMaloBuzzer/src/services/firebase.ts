@@ -57,6 +57,7 @@ export const addUser = async (user: Omit<User, 'id'>) => {
 
 export const removeUser = async (userId: string) => {
   await supabase.from('user_favorites').delete().eq('user_id', userId);
+  await supabase.from('user_favorites').delete().eq('target_user_id', userId);
   await supabase.from('user_tokens').delete().eq('user_id', userId);
   await supabase.from('voice_mails').delete().or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`);
   await supabase.from('call_logs').delete().or(`caller_id.eq.${userId},receiver_id.eq.${userId}`);
